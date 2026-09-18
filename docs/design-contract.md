@@ -53,7 +53,7 @@ When the available context is sufficient to continue troubleshooting, the engine
 
 - exactly one recommended next test
 - a short reason explaining what that test helps distinguish
-- any resulting hypothesis as a hypothesis unless the recorded evidence already supports it
+- any model-generated conclusion as a hypothesis, together with the evidence it relies on; the backend alone assigns its verification status
 - references to the session evidence the recommendation depends on
 
 It must not return a list of possible tests or present an unsupported cause as established.
@@ -64,7 +64,18 @@ If an important piece of context is missing and choosing a test would otherwise 
 
 ### Uncertainty or refusal
 
-If the available evidence cannot support a reliable conclusion, or the requested conclusion would require guessing, the engine must say that the cause cannot yet be established.
+### Uncertainty or refusal
+
+If the user asks Freely to accept a cause that the recorded evidence does not support, the engine must refuse to present that cause as established.
+
+When a useful and safe test can separate that cause from the remaining candidates, the same response returns:
+
+- the refusal to treat the asserted cause as established
+- exactly one separating next test
+- a short reason explaining what that test distinguishes
+- references to the recorded evidence the refusal and test depend on
+
+If the available evidence cannot support a conclusion and no useful test can reliably settle the question, the engine returns uncertainty instead of inventing either a cause or a test.
 
 A model-generated conclusion that is not supported by recorded evidence may be returned only as an unverified hypothesis. Its unverified status is attached by the backend rather than left for the model to label itself.
 
@@ -122,12 +133,13 @@ A rule is considered enforced only when the backend can still uphold it if the m
 
 The following decisions had reasonable alternatives. Both the chosen approach and the rejected path carry costs.
 
-| Decision                      | Chosen approach                                                                                     | Cost accepted                                                                  | Alternative rejected                                        | Cost of the alternative                                                                                   |
-| ----------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Session memory                | Keep structured session state with provenance for measurements, claims, hypotheses and test results | More backend modelling and validation work                                     | Rely mainly on conversation history and prompt instructions | Faster initially, but evidence and claims can blur together and important rules become harder to enforce  |
-| Unsupported model conclusions | Surface them only as backend-marked unverified hypotheses                                           | The user must understand that an unverified hypothesis is not established fact | Reject and retry, or suppress the conclusion                | Retrying adds latency, model cost and possible retry loops; suppression can discard useful reasoning      |
-| Reliability rules             | Enforce critical rules in the backend where possible                                                | More application logic and tests                                               | Depend on prompting alone                                   | Simpler to build, but a confident model can ignore the instruction and violate the rule                   |
-| Circuit support               | Keep one generic reasoning path and provide circuit-specific information as data and context        | Requires a stronger abstraction up front                                       | Add fault-specific code for each circuit                    | Faster for the first circuit, but creates coupling and requires engine changes as more circuits are added |
+| Decision                      | Chosen approach                                                                                                        | Cost accepted                                                                  | Alternative rejected                                        | Cost of the alternative                                                                                     |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Session memory                | Keep structured session state with provenance for measurements, claims, hypotheses and test results                    | More backend modelling and validation work                                     | Rely mainly on conversation history and prompt instructions | Faster initially, but evidence and claims can blur together and important rules become harder to enforce    |
+| Unsupported model conclusions | Surface them only as backend-marked unverified hypotheses                                                              | The user must understand that an unverified hypothesis is not established fact | Reject and retry, or suppress the conclusion                | Retrying adds latency, model cost and possible retry loops; suppression can discard useful reasoning        |
+| Reliability rules             | Enforce critical rules in the backend where possible                                                                   | More application logic and tests                                               | Depend on prompting alone                                   | Simpler to build, but a confident model can ignore the instruction and violate the rule                     |
+| Circuit support               | Keep one generic reasoning path and provide circuit-specific information as data and context                           | Requires a stronger abstraction up front                                       | Add fault-specific code for each circuit                    | Faster for the first circuit, but creates coupling and requires engine changes as more circuits are added   |
+| Voice retention               | Discard raw audio after the required observation has been extracted, while retaining the resulting session information | Loses the ability to re-transcribe or audit the original recording later       | Retain raw audio as part of the troubleshooting session     | Adds storage, privacy, retention and security concerns for data the BuildIt reasoning loop does not require |
 
 ## 7. BuildIt speed trade-offs
 
