@@ -20,11 +20,15 @@ A user claim or model conclusion does not become established merely because it i
 
 ### Promotion rule
 
-Only the backend may change an unverified hypothesis to established.
+Measurements, observations and test results may become trusted evidence when their source and provenance are recorded.
 
-Promotion requires new trusted evidence that directly verifies the claim. Repetition, model confidence, or the user's confidence never changes verification status on their own.
+User diagnostic claims and model-generated causal conclusions do not become trusted evidence merely because evidence is attached to them.
 
-If the available evidence supports a possibility but does not verify it, the claim remains unverified.
+For the BuildIt version, model-generated fault conclusions remain hypotheses. The backend does not attempt to decide whether an electronics diagnosis is semantically correct, because doing so would require rebuilding the model's reasoning as hand-written fault logic.
+
+The backend instead guarantees that the model cannot promote its own conclusion to established fact. It preserves the conclusion as a hypothesis, records the evidence it relies on, and keeps its verification status separate from the model's wording.
+
+Repetition, model confidence and user confidence never change that status on their own.
 
 ## 2. Session state
 
@@ -77,7 +81,7 @@ If choosing a useful test would require guessing because important context is mi
 
 - the specific information that is missing
 - a short reason explaining why that information is needed
-- references to the recorded context that exposed the gap
+- - references to relevant recorded context when such context exists
 
 It must not invent a test merely to avoid asking for missing information.
 
@@ -151,19 +155,27 @@ The model reasons about the electronics. The backend governs the troubleshooting
 - preserving the distinction between circuit data and the generic reasoning engine
 - promoting a hypothesis to established only when the contract's promotion rule is satisfied
 
-A rule is considered enforced only when the backend can still uphold it if the model ignores the instruction. Rules that exist only in the model prompt are requested behaviour, not guarantees.
+A rule is considered enforced only when the backend can still uphold it if the model ignores the instruction.
+
+The backend can enforce structural guarantees such as provenance, verification status, session persistence and allowed response shapes. It cannot guarantee that the model's electronics reasoning is correct. The quality of that reasoning is evaluated through the hidden-ground-truth fault cases.
+
+Instructions that depend on the model's judgment rather than backend validation are requested behaviour, not guarantees, and are treated as such in this BuildIt version.
+
+If the model returns something outside the allowed response contract, the backend treats it as an invalid engine response rather than exposing it as a valid troubleshooting result.
 
 ## 6. Alternatives and trade-offs
 
 The following decisions had reasonable alternatives. Both the chosen approach and the rejected path carry costs.
 
-| Decision                      | Chosen approach                                                                                                        | Cost accepted                                                                  | Alternative rejected                                        | Cost of the alternative                                                                                     |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Session memory                | Keep structured session state with provenance for measurements, claims, hypotheses and test results                    | More backend modelling and validation work                                     | Rely mainly on conversation history and prompt instructions | Faster initially, but evidence and claims can blur together and important rules become harder to enforce    |
-| Unsupported model conclusions | Surface them only as backend-marked unverified hypotheses                                                              | The user must understand that an unverified hypothesis is not established fact | Reject and retry, or suppress the conclusion                | Retrying adds latency, model cost and possible retry loops; suppression can discard useful reasoning        |
-| Reliability rules             | Enforce critical rules in the backend where possible                                                                   | More application logic and tests                                               | Depend on prompting alone                                   | Simpler to build, but a confident model can ignore the instruction and violate the rule                     |
-| Circuit support               | Keep one generic reasoning path and provide circuit-specific information as data and context                           | Requires a stronger abstraction up front                                       | Add fault-specific code for each circuit                    | Faster for the first circuit, but creates coupling and requires engine changes as more circuits are added   |
-| Voice retention               | Discard raw audio after the required observation has been extracted, while retaining the resulting session information | Loses the ability to re-transcribe or audit the original recording later       | Retain raw audio as part of the troubleshooting session     | Adds storage, privacy, retention and security concerns for data the BuildIt reasoning loop does not require |
+| Decision                      | Chosen approach                                                                                                        | Cost accepted                                                                  | Alternative rejected                                        | Cost of the alternative                                                                                                              |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Session memory                | Keep structured session state with provenance for measurements, claims, hypotheses and test results                    | More backend modelling and validation work                                     | Rely mainly on conversation history and prompt instructions | Faster initially, but evidence and claims can blur together and important rules become harder to enforce                             |
+| Unsupported model conclusions | Surface them only as backend-marked unverified hypotheses                                                              | The user must understand that an unverified hypothesis is not established fact | Reject and retry, or suppress the conclusion                | Retrying adds latency, model cost and possible retry loops; suppression can discard useful reasoning                                 |
+| Reliability rules             | Enforce critical rules in the backend where possible                                                                   | More application logic and tests                                               | Depend on prompting alone                                   | Simpler to build, but a confident model can ignore the instruction and violate the rule                                              |
+| Circuit support               | Keep one generic reasoning path and provide circuit-specific information as data and context                           | Requires a stronger abstraction up front                                       | Add fault-specific code for each circuit                    | Faster for the first circuit, but creates coupling and requires engine changes as more circuits are added                            |
+| Voice retention               | Discard raw audio after the required observation has been extracted, while retaining the resulting session information | Loses the ability to re-transcribe or audit the original recording later       | Retain raw audio as part of the troubleshooting session     | Adds storage, privacy, retention and security concerns for data the BuildIt reasoning loop does not require                          |
+| Voice path                    | Convert spoken input into the same troubleshooting input path used by typed observations                               | Requires a reliable transcription/normalisation step before reasoning          | Build a separate reasoning path for voice                   | May be quicker to prototype independently, but duplicates logic and allows typed and spoken troubleshooting behaviour to drift apart |
+| Engine responses              | Restrict the reasoning engine to the defined troubleshooting outcomes                                                  | Requires validation and makes the model less free-form                         | Pass arbitrary model text directly to the interface         | Simpler initially, but the backend cannot reliably enforce one-test, refusal and uncertainty behaviour                               |
 
 ## 7. BuildIt speed trade-offs
 
