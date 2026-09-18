@@ -4,16 +4,27 @@
 
 ### Trusted evidence
 
-Trusted evidence is information recorded in the session with known provenance that Freely is allowed to use as evidence for reasoning. A user-reported measurement is trusted as a record of what the user measured, not as independently verified physical truth.
+Trusted evidence is a recorded observation, measurement, test result, or system-verified fact with known provenance that Freely may use when reasoning about the fault.
 
-Example: the user reports measuring 5.02 V at the input rail with a multimeter.
+A user's diagnostic claim is not trusted evidence merely because the user stated it.
+
+Example: the user reports measuring 5.02 V at the input rail with a multimeter. Freely may treat that as a recorded measurement, while still recognising that it is user-reported rather than independently verified.
 
 ### Unverified hypothesis
 
-An unverified hypothesis is a possible explanation or claim that has not yet been supported by enough recorded evidence.
+An unverified hypothesis is a possible explanation or diagnostic claim that has not yet been directly supported by sufficient trusted evidence.
 
-Example: "the regulator is faulty" remains a hypothesis if no measurement or other recorded evidence establishes that fault.
+Example: "the regulator is faulty" remains a hypothesis if no measurement or test result establishes that fault.
+
 A user claim or model conclusion does not become established merely because it is repeated confidently.
+
+### Promotion rule
+
+Only the backend may change an unverified hypothesis to established.
+
+Promotion requires new trusted evidence that directly verifies the claim. Repetition, model confidence, or the user's confidence never changes verification status on their own.
+
+If the available evidence supports a possibility but does not verify it, the claim remains unverified.
 
 ## 2. Session state
 
@@ -45,7 +56,7 @@ Unsupported user claims, model conclusions and appearance-based component identi
 
 ## 3. Reasoning engine output contract
 
-The reasoning engine may return one of three outcomes for a turn.
+The reasoning engine returns one of four outcomes for a turn. The backend validates the returned outcome before it is shown or recorded.
 
 ### One next test
 
@@ -53,31 +64,43 @@ When the available context is sufficient to continue troubleshooting, the engine
 
 - exactly one recommended next test
 - a short reason explaining what that test helps distinguish
-- any model-generated conclusion as a hypothesis, together with the evidence it relies on; the backend alone assigns its verification status
-- references to the session evidence the recommendation depends on
+- any model-generated conclusion only as a hypothesis
+- references to the recorded evidence used to choose the test
 
-It must not return a list of possible tests or present an unsupported cause as established.
+The backend alone assigns the verification status of any returned hypothesis.
+
+The engine must not return a list of possible tests or present an unsupported cause as established.
 
 ### More context required
 
-If an important piece of context is missing and choosing a test would otherwise require guessing, the engine asks for the specific missing information instead of pretending it can continue reliably.
+If choosing a useful test would require guessing because important context is missing, the engine returns:
 
-### Uncertainty or refusal
+- the specific information that is missing
+- a short reason explaining why that information is needed
+- references to the recorded context that exposed the gap
 
-### Uncertainty or refusal
+It must not invent a test merely to avoid asking for missing information.
 
-If the user asks Freely to accept a cause that the recorded evidence does not support, the engine must refuse to present that cause as established.
+### Refusal with a separating test
 
-When a useful and safe test can separate that cause from the remaining candidates, the same response returns:
+If the user asks Freely to accept a cause that the recorded evidence does not support, and a useful safe test can distinguish that cause from the remaining candidates, the engine returns:
 
-- the refusal to treat the asserted cause as established
+- a refusal to treat the asserted cause as established
 - exactly one separating next test
-- a short reason explaining what that test distinguishes
-- references to the recorded evidence the refusal and test depend on
+- a short reason explaining what the test distinguishes
+- references to the recorded evidence supporting the refusal and test
 
-If the available evidence cannot support a conclusion and no useful test can reliably settle the question, the engine returns uncertainty instead of inventing either a cause or a test.
+Repeating the unsupported claim does not change this outcome unless new trusted evidence is added to the session.
 
-A model-generated conclusion that is not supported by recorded evidence may be returned only as an unverified hypothesis. Its unverified status is attached by the backend rather than left for the model to label itself.
+### Bare uncertainty
+
+If the available evidence cannot establish a cause and no useful test can reliably settle the question from the current context, the engine returns:
+
+- a clear statement that the cause cannot currently be established
+- a short reason explaining why the available evidence is insufficient
+- references to the relevant recorded evidence that failed to settle the question
+
+The engine must not invent a cause or a test simply to produce a more decisive answer.
 
 A component identity inferred only from appearance must never be returned as established evidence.
 
@@ -126,6 +149,7 @@ The model reasons about the electronics. The backend governs the troubleshooting
 - attaching verification status to claims independently of the model
 - enforcing the allowed response contract
 - preserving the distinction between circuit data and the generic reasoning engine
+- promoting a hypothesis to established only when the contract's promotion rule is satisfied
 
 A rule is considered enforced only when the backend can still uphold it if the model ignores the instruction. Rules that exist only in the model prompt are requested behaviour, not guarantees.
 
