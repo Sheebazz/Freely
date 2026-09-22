@@ -13,8 +13,7 @@
   "components": [
     {
       "ref": "U1",
-      "description": "8-pin timer/control device",
-      "exact_part_number_visible_to_session": false
+      "description": "8-pin timer/control device"
     },
     {
       "ref": "R1",
@@ -119,14 +118,14 @@
       "power_state": "powered",
       "procedure": "Measure voltage from TP_RESET to GND.",
       "possible_results": [
-        {
-          "result": "4.5 V to 5.5 V",
-          "implication": "TP_RESET is within the documented high-level range for this circuit fixture. A reset node held low is not supported by this measurement."
-        },
-        {
-          "result": "0 V to 0.5 V",
-          "implication": "TP_RESET is within the documented low-level range. The reset/control node is being held low, so normal oscillator output should not be assumed until the source of that low level is investigated."
-        }
+           {
+              "result": "4.5 V to 5.5 V",
+              "implication": "TP_RESET is in the high-voltage result range defined for this test. A reset node held low is not supported by this measurement."
+           },
+           {
+              "result": "0 V to 0.5 V",
+             "implication": "TP_RESET is in the low-voltage result range defined for this test. The reset/control node is being held low, so normal oscillator output should not be assumed until the source of that low level is investigated."
+           }
       ]
     },
 
