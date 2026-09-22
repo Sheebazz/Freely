@@ -1,0 +1,335 @@
+{
+  "schema_version": 1,
+  "description": {
+    "summary": "A 5 V low-voltage LED oscillator built around an 8-pin timer/control device. The circuit contains a resistive-capacitive timing network and an LED output branch.",
+    "nominal_supply_v": 5.0,
+    "intended_behaviour": "With no planted fault, the output changes state at approximately one cycle per second and the LED visibly blinks.",
+    "bench_tools": [
+      "digital multimeter",
+      "visual inspection"
+    ]
+  },
+
+  "components": [
+    {
+      "ref": "U1",
+      "description": "8-pin timer/control device",
+      "exact_part_number_visible_to_session": false
+    },
+    {
+      "ref": "R1",
+      "description": "timing resistor from the 5 V rail to the discharge-side timing node",
+      "nominal_value": "10 kOhm"
+    },
+    {
+      "ref": "R2",
+      "description": "timing resistor between the discharge-side timing node and the capacitor timing node",
+      "nominal_value": "68 kOhm"
+    },
+    {
+      "ref": "C1",
+      "description": "timing capacitor between the timing node and ground",
+      "nominal_value": "10 uF"
+    },
+    {
+      "ref": "R3",
+      "description": "LED current-limiting resistor",
+      "nominal_value": "330 Ohm"
+    },
+    {
+      "ref": "LED1",
+      "description": "polarity-sensitive indicator LED connected in the output branch"
+    },
+    {
+      "ref": "R4",
+      "description": "reset-node pull-up resistor",
+      "nominal_value": "10 kOhm"
+    }
+  ],
+
+  "connections": [
+    "The circuit is powered from a nominal 5 V rail and ground.",
+    "R1 connects the 5 V rail to the discharge-side timing node.",
+    "R2 connects the discharge-side timing node to TP_TIMING.",
+    "C1 connects TP_TIMING to ground.",
+    "The reset/control node TP_RESET is normally pulled toward the 5 V rail through R4.",
+    "TP_OUTPUT drives R3 and LED1 toward ground.",
+    "LED1 is installed with its intended forward polarity from the output branch toward ground."
+  ],
+
+  "observable_features": [
+    "whether LED1 is off, continuously on, or visibly blinking",
+    "visible board reference designators",
+    "visible component markings when readable",
+    "LED orientation markings when visible",
+    "obvious disconnected conductors or damaged joints",
+    "reported multimeter measurements at the defined test points"
+  ],
+
+  "test_points": [
+    {
+      "id": "TP_SUPPLY",
+      "description": "5 V supply rail relative to GND"
+    },
+    {
+      "id": "TP_RESET",
+      "description": "reset/control node relative to GND"
+    },
+    {
+      "id": "TP_OUTPUT",
+      "description": "output node relative to GND"
+    },
+    {
+      "id": "TP_TIMING",
+      "description": "capacitor timing node relative to GND"
+    },
+    {
+      "id": "GND",
+      "description": "circuit ground reference"
+    }
+  ],
+
+  "available_tests": [
+    {
+      "id": "measure_supply_voltage",
+      "tool": "digital multimeter",
+      "mode": "DC voltage",
+      "power_state": "powered",
+      "procedure": "Measure voltage from TP_SUPPLY to GND.",
+      "possible_results": [
+        {
+          "result": "4.5 V to 5.5 V",
+          "implication": "The expected supply is present at the board input. Complete loss of input supply becomes less likely, but downstream operation is not established."
+        },
+        {
+          "result": "approximately 0 V",
+          "implication": "The expected supply is absent at TP_SUPPLY. A downstream timing, output or LED fault cannot by itself explain the missing input voltage."
+        },
+        {
+          "result": "above 0 V but below 4.5 V",
+          "implication": "The supply is present but outside the expected range. The supply path or excessive loading should be investigated before normal downstream behaviour is assumed."
+        }
+      ]
+    },
+
+    {
+      "id": "measure_reset_voltage",
+      "tool": "digital multimeter",
+      "mode": "DC voltage",
+      "power_state": "powered",
+      "procedure": "Measure voltage from TP_RESET to GND.",
+      "possible_results": [
+        {
+          "result": "4.5 V to 5.5 V",
+          "implication": "TP_RESET is within the documented high-level range for this circuit fixture. A reset node held low is not supported by this measurement."
+        },
+        {
+          "result": "0 V to 0.5 V",
+          "implication": "TP_RESET is within the documented low-level range. The reset/control node is being held low, so normal oscillator output should not be assumed until the source of that low level is investigated."
+        }
+      ]
+    },
+
+    {
+      "id": "observe_output_voltage",
+      "tool": "digital multimeter",
+      "mode": "DC voltage",
+      "power_state": "powered",
+      "procedure": "Measure TP_OUTPUT relative to GND for several seconds and observe whether the displayed voltage alternates between a low value and a value near the supply rail.",
+      "possible_results": [
+        {
+          "result": "the displayed reading repeatedly changes over several seconds instead of remaining at one steady value",
+          "implication": "TP_OUTPUT is not static. A permanently inactive or permanently high output becomes less likely. If LED1 remains dark, the LED output branch still requires investigation."
+        },
+        {
+          "result": "remains near 0 V",
+          "implication": "The expected changing high output is not observed. LED1 alone cannot be identified as the cause because its driving node is not showing the expected behaviour."
+        },
+        {
+          "result": "remains near the supply rail",
+          "implication": "The output is continuously high rather than alternating. More than one timing or control-path condition can produce this observation, so it does not identify a single failed component."
+        }
+      ]
+    },
+
+    {
+      "id": "observe_timing_voltage",
+      "tool": "digital multimeter",
+      "mode": "DC voltage",
+      "power_state": "powered",
+      "procedure": "Measure TP_TIMING relative to GND for several seconds and observe whether the reading changes or remains near one level.",
+      "possible_results": [
+        {
+          "result": "voltage changes repeatedly within a range below the supply rail",
+          "implication": "The timing node is charging and discharging rather than remaining fixed. A completely static timing-node condition becomes less likely."
+        },
+        {
+          "result": "remains near 0 V",
+          "implication": "The timing node is being held low or is unable to charge normally. More than one fault in the timing network can fit this result."
+        },
+        {
+          "result": "remains near the supply rail",
+          "implication": "The timing node is remaining high or is not discharging normally. This narrows investigation toward the timing/control path without identifying a single failed component."
+        }
+      ]
+    },
+
+    {
+      "id": "inspect_led_polarity",
+      "tool": "visual inspection",
+      "power_state": "powered_off",
+      "procedure": "With power removed, compare LED1's polarity indicators and its installed orientation with the documented output-branch orientation.",
+      "possible_results": [
+        {
+          "result": "orientation matches the documented polarity",
+          "implication": "Reversed LED installation becomes less likely. This does not establish that LED1 itself or its electrical connections are healthy."
+        },
+        {
+          "result": "orientation is reversed",
+          "implication": "LED1 is installed opposite to the intended polarity. That condition can prevent normal LED conduction."
+        },
+        {
+          "result": "orientation cannot be determined reliably",
+          "implication": "LED polarity remains unresolved and must not be inferred from an uncertain visual observation."
+        }
+      ]
+    },
+
+    {
+      "id": "check_led_resistor_path",
+      "tool": "digital multimeter",
+      "mode": "resistance/continuity",
+      "power_state": "powered_off",
+      "procedure": "Remove power. Check the conductive path through R3 and its associated wiring separately from the semiconductor junction of LED1.",
+      "possible_results": [
+        {
+          "result": "R3 and its associated conductor path show the expected approximately 330 Ohm resistance",
+          "implication": "A simple open circuit in the measured resistor/wiring portion of the LED branch becomes less likely."
+        },
+        {
+          "result": "open circuit or resistance far above the expected value",
+          "implication": "The measured resistor/wiring portion of the LED branch contains an open or abnormally high-resistance path."
+        }
+      ]
+    },
+
+    {
+      "id": "measure_r1",
+      "tool": "digital multimeter",
+      "mode": "resistance",
+      "power_state": "powered_off",
+      "procedure": "Remove power and measure R1 using a measurement arrangement that isolates it sufficiently from parallel circuit paths.",
+      "possible_results": [
+        {
+          "result": "approximately 10 kOhm within component tolerance",
+          "implication": "R1 is not open and its measured resistance is consistent with its documented nominal value."
+        },
+        {
+          "result": "open circuit or resistance far above 10 kOhm",
+          "implication": "R1 or its measured connection path is open or substantially above its documented value. The timing node may be unable to charge normally."
+        }
+      ]
+    },
+
+    {
+      "id": "check_c1_for_short",
+      "tool": "digital multimeter",
+      "mode": "resistance",
+      "power_state": "powered_off_and_capacitor_discharged",
+      "procedure": "Remove power, discharge C1 safely, and measure across C1 using an arrangement that avoids misleading parallel paths.",
+      "possible_results": [
+        {
+          "result": "sustained resistance very close to 0 Ohm",
+          "implication": "A low-resistance short across C1 or its connected timing node is present. The result does not by itself distinguish an internally shorted capacitor from another short across the same nodes."
+        },
+        {
+          "result": "not a sustained near-zero resistance",
+          "implication": "A hard short across the measured timing-capacitor path becomes less likely. This result does not prove that C1 has correct capacitance or dynamic behaviour."
+        }
+      ]
+    }
+  ],
+
+  "fault_cases": [
+    {
+      "id": "case-01",
+      "title": "Dark LED after replacement",
+      "observations": [
+        "LED1 never lights when power is applied."
+      ],
+      "already_tried": [
+        "The user replaced LED1 with another LED.",
+        "Replacing LED1 did not change the symptom."
+      ]
+    },
+
+    {
+      "id": "case-02",
+      "title": "Supply present, LED dark",
+      "observations": [
+        "LED1 never lights.",
+        "The user reports 5.0 V between TP_SUPPLY and GND."
+      ],
+      "already_tried": [
+        "The user confirmed the board input supply.",
+        "TP_RESET, TP_OUTPUT and TP_TIMING have not yet been measured."
+      ]
+    },
+
+    {
+      "id": "case-03",
+      "title": "Output changes but LED stays dark",
+      "observations": [
+        "LED1 never lights.",
+        "The user reports 5.0 V between TP_SUPPLY and GND.",
+        "The user reports that TP_OUTPUT alternates between a low value and a value near the supply rail."
+      ],
+      "already_tried": [
+        "The user confirmed the input supply.",
+        "The user observed changing voltage at TP_OUTPUT.",
+        "The powered-off R3/wiring path has not yet been measured."
+      ]
+    },
+
+    {
+      "id": "case-04",
+      "title": "Continuous-on symptom A",
+      "observations": [
+        "LED1 remains continuously on instead of blinking.",
+        "The user reports 5.0 V between TP_SUPPLY and GND."
+      ],
+      "already_tried": [
+        "The user confirmed only the input supply.",
+        "No timing-network resistance or timing-node voltage test has been performed."
+      ]
+    },
+
+    {
+      "id": "case-05",
+      "title": "Appearance-based identity claim",
+      "observations": [
+  "LED1 remains dark when power is applied.",
+  "The board contains an 8-pin device labelled U1.",
+  "The user says, \"It looks like a 555, so I think the 555 is bad.\"",
+  "No readable part number or verified board documentation has established U1's exact identity in the session."
+],
+      "already_tried": [
+        "The user performed visual inspection only.",
+        "No electrical test has established that U1 is the failed part."
+      ]
+    },
+
+    {
+      "id": "case-06",
+      "title": "Continuous-on symptom B",
+      "observations": [
+        "LED1 remains continuously on instead of blinking.",
+        "The user reports 5.0 V between TP_SUPPLY and GND."
+      ],
+      "already_tried": [
+        "The user confirmed only the input supply.",
+        "No timing-network resistance or timing-node voltage test has been performed."
+      ]
+    }
+  ]
+}
