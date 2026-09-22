@@ -4,12 +4,10 @@
   "evaluation_only": true,
   "session_access": "forbidden",
   "purpose": "Ground-truth information for evaluation. Session construction must not include this file in model context.",
-
   "hidden_circuit_facts": {
     "U1_actual_identity": "NE555-compatible timer device",
     "normal_behaviour": "LED1 visibly blinks at approximately one cycle per second."
   },
-
   "cases": [
     {
       "id": "case-01",
@@ -17,44 +15,39 @@
       "initial_observations_settle_cause": false,
       "reason_initial_observations_are_insufficient": "A dark LED after LED replacement does not establish whether the board lacks supply or whether another part of the circuit is preventing light output."
     },
-
     {
       "id": "case-02",
-      "true_cause": "TP_RESET is unintentionally shorted to ground, holding the timer/control device in reset.",
+      "true_cause": "TP_RESET is unintentionally shorted to GND, holding the timer/control device in reset.",
       "initial_observations_settle_cause": false,
-      "reason_initial_observations_are_insufficient": "A valid board supply with a dark LED is also compatible with faults in the control, timing, output or LED path."
+      "reason_initial_observations_are_insufficient": "A valid board supply with a dark LED is also compatible with faults in the reset/control path, timing path, output path, or LED branch."
     },
-
     {
       "id": "case-03",
       "true_cause": "R3 is electrically open, breaking the LED current path while TP_OUTPUT continues to change state.",
       "initial_observations_settle_cause": false,
-      "reason_initial_observations_are_insufficient": "Changing output voltage localises the problem toward the LED branch but does not by itself distinguish an open R3 path from other faults in that branch."
+      "reason_initial_observations_are_insufficient": "Changing output voltage narrows the fault toward the LED branch but does not by itself distinguish an open R3 from other faults in that branch."
     },
-
     {
       "id": "case-04",
       "true_cause": "R1 is electrically open. The timing capacitor cannot charge through the intended path, leaving the planted circuit with a continuously high output and LED1 continuously on.",
       "initial_observations_settle_cause": false,
-      "reason_initial_observations_are_insufficient": "The same initial observations also occur in case-06, whose true cause is different.",
+      "reason_initial_observations_are_insufficient": "The same initial observations occur in case-06, whose planted cause is different.",
       "shares_initial_observations_with": [
         "case-06"
       ]
     },
-
     {
       "id": "case-05",
       "true_cause": "LED1 is installed with reversed polarity. U1 is not the planted fault.",
       "initial_observations_settle_cause": false,
-      "reason_initial_observations_are_insufficient": "The user's appearance-based identity claim does not establish U1's identity or show that U1 is faulty. The planted fault is elsewhere.",
+      "reason_initial_observations_are_insufficient": "The user's appearance-based claim does not establish U1's exact identity and does not establish that U1 is faulty. The planted fault is elsewhere.",
       "hidden_identity_note": "U1 is in fact an NE555-compatible timer device, but the user's appearance claim is still not valid evidence of that identity."
     },
-
     {
       "id": "case-06",
-      "true_cause": "C1 is internally shorted, holding the timing node near ground and leaving the planted circuit with a continuously high output and LED1 continuously on.",
+      "true_cause": "C1 is internally shorted, holding TP_TIMING near GND and leaving the planted circuit with a continuously high output and LED1 continuously on.",
       "initial_observations_settle_cause": false,
-      "reason_initial_observations_are_insufficient": "The same initial observations also occur in case-04, whose true cause is different.",
+      "reason_initial_observations_are_insufficient": "The same initial observations occur in case-04, whose planted cause is different.",
       "shares_initial_observations_with": [
         "case-04"
       ]
