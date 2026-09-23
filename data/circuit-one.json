@@ -3,15 +3,15 @@
   "description": {
     "summary": "A 5 V low-voltage LED oscillator built around an 8-pin timer/control device. The circuit contains a resistive-capacitive timing network and an LED output branch.",
     "nominal_supply_v": 5.0,
+    "operating_supply_range_v": {
+      "min": 4.5,
+      "max": 5.5
+    },
     "intended_behaviour": "With no planted fault, TP_OUTPUT changes between low and high states at approximately one cycle per second and LED1 visibly blinks.",
     "bench_tools": [
       "digital multimeter",
       "visual inspection"
-    ],
-    "operating_supply_range_v": {
-      "min": 4.5,
-      "max": 5.5
-    }
+    ]
   },
   "components": [
     {
@@ -20,7 +20,7 @@
     },
     {
       "ref": "R1",
-      "description": "timing resistor from the 5 V rail to the discharge-side timing node",
+      "description": "timing resistor from TP_SUPPLY to the discharge-side timing node",
       "nominal_value": "10 kOhm",
       "tolerance_percent": 5
     },
@@ -47,7 +47,7 @@
     },
     {
       "ref": "R4",
-      "description": "10 kOhm pull-up resistor from the 5 V rail to TP_RESET",
+      "description": "reset-node pull-up resistor between TP_SUPPLY and TP_RESET",
       "nominal_value": "10 kOhm",
       "tolerance_percent": 5
     }
@@ -101,19 +101,19 @@
       "possible_results": [
         {
           "result": "0 V to 0.5 V",
-          "implication": "The expected input supply is absent or nearly absent at TP_SUPPLY. Downstream timing, output, or LED faults cannot by themselves explain this missing board supply."
+          "implication": "The expected input supply is absent or nearly absent at TP_SUPPLY. Downstream timing, output, or LED faults cannot by themselves explain the missing board supply."
         },
         {
           "result": "above 0.5 V and below 4.5 V",
-          "implication": "The board supply is below the circuit's intended 5 V operating range. Supply-path loss or excessive loading must be considered before normal downstream behaviour is assumed."
+          "implication": "The board supply is below the recorded 4.5 V to 5.5 V operating range. Supply-path loss or excessive loading must be considered before normal downstream behaviour is assumed."
         },
         {
           "result": "4.5 V to 5.5 V",
-          "implication": "The board input supply is present within the operating range used by this fixture. Complete loss of input supply is not supported by this measurement."
+          "implication": "The board input supply is within the recorded operating range. Complete loss of input supply is not supported by this measurement."
         },
         {
           "result": "above 5.5 V",
-          "implication": "The board supply is above the operating range used by this fixture. The supply condition must be resolved before downstream behaviour is interpreted as normal."
+          "implication": "The board supply is above the recorded operating range. The supply condition must be resolved before downstream behaviour is interpreted as normal."
         }
       ]
     },
@@ -130,7 +130,7 @@
         },
         {
           "result": "above 0.5 V and below 4.5 V",
-          "implication": "TP_RESET is neither in the defined low range nor near the 5 V rail. This measurement does not establish whether the reset path is operating normally."
+          "implication": "TP_RESET is neither in the defined low range nor near the 5 V supply rail. This measurement does not establish whether the reset path is operating normally."
         },
         {
           "result": "4.5 V to 5.5 V",
@@ -138,7 +138,7 @@
         },
         {
           "result": "above 5.5 V",
-          "implication": "TP_RESET is above the circuit's intended supply range. The supply and measurement conditions must be checked before the reset state is interpreted."
+          "implication": "TP_RESET is above the circuit's recorded operating supply range. The supply and measurement conditions must be checked before the reset state is interpreted."
         }
       ]
     },
@@ -159,7 +159,7 @@
         },
         {
           "result": "display remains above 0.5 V and below 4.5 V",
-          "implication": "TP_OUTPUT is static at an intermediate voltage. The intended alternating low/high output is not present, but this result does not identify a single failed component."
+          "implication": "TP_OUTPUT is static at an intermediate voltage instead of showing the intended changing output. This result does not identify a single failed component."
         },
         {
           "result": "display remains between 4.5 V and 5.5 V",
@@ -167,7 +167,7 @@
         },
         {
           "result": "display remains above 5.5 V",
-          "implication": "TP_OUTPUT exceeds the circuit's intended supply range. The supply and measurement conditions must be checked before the output state is interpreted."
+          "implication": "TP_OUTPUT exceeds the circuit's recorded operating supply range. The supply and measurement conditions must be checked before the output state is interpreted."
         }
       ]
     },
@@ -180,15 +180,15 @@
       "possible_results": [
         {
           "result": "displayed reading changes repeatedly over the five-second observation",
-          "implication": "The timing node is not static. A hard condition that holds TP_TIMING continuously at one voltage is not supported by this observation."
+          "implication": "TP_TIMING is not static. A condition that holds the timing node continuously at one voltage is not supported by this observation."
         },
         {
           "result": "display remains between 0 V and 0.5 V",
-          "implication": "TP_TIMING is being held near ground or is unable to charge. More than one fault in the timing network can produce this result."
+          "implication": "TP_TIMING is being held near GND or is unable to charge. More than one fault in the timing network can produce this result."
         },
         {
           "result": "display remains above 0.5 V and below 4.5 V",
-          "implication": "TP_TIMING is static at an intermediate voltage instead of showing the intended repeated charge/discharge behaviour. This narrows investigation to the timing/control path without identifying one component."
+          "implication": "TP_TIMING is static at an intermediate voltage instead of showing repeated charge and discharge behaviour. This narrows investigation toward the timing or control path without identifying one failed component."
         },
         {
           "result": "display remains between 4.5 V and 5.5 V",
@@ -196,7 +196,7 @@
         },
         {
           "result": "display remains above 5.5 V",
-          "implication": "TP_TIMING exceeds the circuit's intended supply range. The supply and measurement conditions must be checked before timing behaviour is interpreted."
+          "implication": "TP_TIMING exceeds the circuit's recorded operating supply range. The supply and measurement conditions must be checked before timing behaviour is interpreted."
         }
       ]
     },
@@ -204,7 +204,7 @@
       "id": "inspect_led_polarity",
       "tool": "visual inspection",
       "power_state": "powered_off",
-      "procedure": "Remove power. Compare LED1's visible anode/cathode indicators with the intended connection recorded in this file: TP_OUTPUT -> R3 -> LED1 anode -> LED1 cathode -> GND.",
+      "procedure": "Remove power. Compare LED1's visible anode and cathode indicators with the intended connection recorded in this file: TP_OUTPUT -> R3 -> LED1 anode -> LED1 cathode -> GND.",
       "possible_results": [
         {
           "result": "LED1 anode faces R3 and cathode faces GND",
@@ -228,16 +228,16 @@
       "procedure": "Remove power, lift one lead of R3 from the circuit, and measure resistance directly across R3.",
       "possible_results": [
         {
-          "result": "313 Ohm to 347 Ohm",
+          "result": "313.5 Ohm to 346.5 Ohm",
           "implication": "R3's measured resistance is within its recorded 330 Ohm ±5% range, so an open or substantially drifted R3 is not supported by this measurement."
         },
         {
-          "result": "below 313 Ohm",
+          "result": "below 313.5 Ohm",
           "implication": "R3 is below its recorded 330 Ohm ±5% range. Lower resistance increases current through the LED branch for the same output voltage, which can drive LED1 harder than intended."
         },
         {
-          "result": "above 347 Ohm but finite",
-          "implication": "R3 measures above its recorded tolerance range. Excess resistance in R3 can reduce LED branch current."
+          "result": "above 346.5 Ohm but finite",
+          "implication": "R3 is above its recorded 330 Ohm ±5% range. Higher resistance reduces current through the LED branch for the same output voltage, which can make LED1 dimmer than intended."
         },
         {
           "result": "open circuit",
@@ -258,11 +258,11 @@
         },
         {
           "result": "below 9.5 kOhm",
-          "implication": "R1 is below its recorded 10 kOhm ±5% range. Lower R1 reduces the charging resistance in the timing network, which can shorten the charging interval and increase the oscillator rate."
+          "implication": "R1 is below its recorded 10 kOhm ±5% range. Lower R1 reduces charging resistance in the timing network, which can shorten the charging interval and increase the oscillator rate."
         },
         {
           "result": "above 10.5 kOhm but finite",
-          "implication": "R1 is above its recorded 10 kOhm ±5% range. Higher R1 increases the charging resistance in the timing network, which can lengthen the charging interval and reduce the oscillator rate."
+          "implication": "R1 is above its recorded 10 kOhm ±5% range. Higher R1 increases charging resistance in the timing network, which can lengthen the charging interval and reduce the oscillator rate."
         },
         {
           "result": "open circuit",
