@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "description": {
     "summary": "A 5 V low-voltage LED oscillator built around an 8-pin timer/control device. The circuit contains a resistive-capacitive timing network and an LED output branch.",
     "nominal_supply_v": 5.0,
@@ -233,7 +233,7 @@
         },
         {
           "result": "below 313 Ohm",
-          "implication": "R3 measures below its recorded tolerance range. The resistor value is not consistent with the fixture data."
+          "implication": "R3 is below its recorded 330 Ohm ±5% range. Lower resistance increases current through the LED branch for the same output voltage, which can drive LED1 harder than intended."
         },
         {
           "result": "above 347 Ohm but finite",
@@ -258,11 +258,11 @@
         },
         {
           "result": "below 9.5 kOhm",
-          "implication": "R1 measures below its recorded tolerance range. The timing resistance is lower than the fixture data specifies."
+          "implication": "R1 is below its recorded 10 kOhm ±5% range. Lower R1 reduces the charging resistance in the timing network, which can shorten the charging interval and increase the oscillator rate."
         },
         {
           "result": "above 10.5 kOhm but finite",
-          "implication": "R1 measures above its recorded tolerance range. The timing resistance is higher than the fixture data specifies."
+          "implication": "R1 is above its recorded 10 kOhm ±5% range. Higher R1 increases the charging resistance in the timing network, which can lengthen the charging interval and reduce the oscillator rate."
         },
         {
           "result": "open circuit",
