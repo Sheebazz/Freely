@@ -1,0 +1,36 @@
+{
+  "name": "freely",
+  "version": "1.0.0",
+  "description": "Evidence-aware electronics reasoning backend for Freely.",
+  "private": true,
+  "scripts": {
+    "test": "vitest run --exclude '**/*.integration.test.mjs'",
+    "test:integration": "vitest run tests/supabaseSession.repository.integration.test.mjs tests/turnProcessing.integration.test.mjs",
+    "test:semantic": "vitest run tests/geminiExtractor.semantic.integration.test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sheebazz/Freely.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Sheebazz/Freely/issues"
+  },
+  "homepage": "https://github.com/Sheebazz/Freely#readme",
+  "dependencies": {
+    "@google/genai": "^2.24.0",
+    "@supabase/supabase-js": "^2.117.2",
+    "dotenv": "^18.0.4",
+    "zod": "^4.6.5"
+  },
+  "allowScripts": {
+    "@google/genai@2.24.0": true,
+    "protobufjs@7.6.6": true
+  },
+  "devDependencies": {
+    "vitest": "^5.0.2"
+  }
+}
