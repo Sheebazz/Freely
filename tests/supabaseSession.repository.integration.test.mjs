@@ -488,6 +488,61 @@ describe("Supabase session repository integration", () => {
     }
   }, 15000);
 
+  it("rejects category-changing corrections at the database boundary", async () => {
+    const sessionId = randomUUID();
+    const originalTurn = randomUUID();
+    const correctionTurn = randomUUID();
+    const createdAt = new Date().toISOString();
+
+    try {
+      await createSession({ id: sessionId, circuitId: "circuit-one", createdAt });
+      await createTestTurn({ id: originalTurn, sessionId });
+      await createTestTurn({ id: correctionTurn, sessionId });
+
+      const original = observationItem({
+        sessionId,
+        turnId: originalTurn,
+        content: "The LED looks dim",
+      });
+
+      await finalizeTurn({
+        id: originalTurn,
+        sessionId,
+        items: [original],
+        completion: acceptedCompletion,
+      });
+
+      const invalidCorrection = buildSessionItem({
+        extractedItem: {
+          category: "hypothesis",
+          content: "The LED is faulty",
+          sourceText: "The LED is faulty",
+          correctionRef: "candidate-integration",
+        },
+        resolvedSupersedesId: original.id,
+        sessionId,
+        turnId: correctionTurn,
+        itemIndex: 0,
+      });
+
+      await expect(
+        finalizeTurn({
+          id: correctionTurn,
+          sessionId,
+          items: [invalidCorrection],
+          completion: acceptedCompletion,
+        })
+      ).rejects.toThrow("cannot change item category");
+
+      expect(await getItemsForTurn({ sessionId, turnId: correctionTurn }))
+        .toHaveLength(0);
+      expect((await getTurn({ id: correctionTurn, sessionId }))?.status)
+        .toBe("processing");
+    } finally {
+      await cleanupSessions([sessionId]);
+    }
+  }, 15000);
+
   it("stores clarification metadata for deterministic replay", async () => {
     const sessionId = randomUUID();
     const turnId = randomUUID();

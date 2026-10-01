@@ -178,6 +178,133 @@ describe("extraction service", () => {
       .toContain("cannot classify more than one item");
   });
 
+  it("repairs a measurement value that is not supported by the quoted source", async () => {
+    const provider = {
+      extract: vi.fn().mockResolvedValue({
+        items: [
+          {
+            category: "evidence",
+            kind: "measurement",
+            subject: "TP1",
+            value: 5.0,
+            unit: "V",
+            content: "TP1 measured 5.0 V",
+            sourceText: "The meter says 5.02 V",
+          },
+        ],
+        unresolved: [],
+      }),
+      repair: vi.fn().mockResolvedValue({
+        items: [
+          {
+            category: "evidence",
+            kind: "measurement",
+            subject: "TP1",
+            value: 5.02,
+            unit: "V",
+            content: "TP1 measured 5.02 V",
+            sourceText: "The meter says 5.02 V",
+          },
+        ],
+        unresolved: [],
+      }),
+    };
+
+    const result = await extractUserMessage({
+      provider,
+      userMessage: "The meter says 5.02 V.",
+    });
+
+    expect(result.items[0].value).toBe(5.02);
+    expect(provider.repair).toHaveBeenCalledOnce();
+    expect(provider.repair.mock.calls[0][0].reason)
+      .toContain("measurement value must be supported");
+  });
+
+  it("does not mistake an identifier digit for an attested measurement value", async () => {
+    const provider = {
+      extract: vi.fn().mockResolvedValue({
+        items: [
+          {
+            category: "evidence",
+            kind: "measurement",
+            subject: "TP1",
+            value: 1,
+            unit: "V",
+            content: "TP1 measured 1 V",
+            sourceText: "TP1 reads 4.8 V",
+          },
+        ],
+        unresolved: [],
+      }),
+      repair: vi.fn().mockResolvedValue({
+        items: [
+          {
+            category: "evidence",
+            kind: "measurement",
+            subject: "TP1",
+            value: 4.8,
+            unit: "V",
+            content: "TP1 measured 4.8 V",
+            sourceText: "TP1 reads 4.8 V",
+          },
+        ],
+        unresolved: [],
+      }),
+    };
+
+    const result = await extractUserMessage({
+      provider,
+      userMessage: "TP1 reads 4.8 V.",
+    });
+
+    expect(result.items[0].value).toBe(4.8);
+    expect(provider.repair).toHaveBeenCalledOnce();
+  });
+
+  it("repairs a correctionRef that attempts to change item type", async () => {
+    const provider = {
+      extract: vi.fn().mockResolvedValue({
+        items: [
+          {
+            category: "hypothesis",
+            content: "The LED is faulty",
+            sourceText: "I think the LED is faulty",
+            correctionRef: "candidate-a",
+          },
+        ],
+        unresolved: [],
+      }),
+      repair: vi.fn().mockResolvedValue({
+        items: [],
+        unresolved: [
+          {
+            sourceText: "I think the LED is faulty",
+            reason: "the intended revision would change the stored item type",
+          },
+        ],
+      }),
+    };
+
+    const result = await extractUserMessage({
+      provider,
+      userMessage: "I think the LED is faulty.",
+      correctionCandidates: [
+        {
+          ref: "candidate-a",
+          category: "observation",
+          content: "The LED looks dim",
+        },
+      ],
+    });
+
+    expect(result.items).toHaveLength(0);
+    expect(result.unresolved).toHaveLength(1);
+    expect(provider.repair).toHaveBeenCalledOnce();
+    expect(provider.repair.mock.calls[0][0].reason)
+      .toContain("cannot change item category");
+  });
+
   it("does not enter an endless repair loop", async () => {
     let repairCalls = 0;
 

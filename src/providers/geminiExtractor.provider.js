@@ -143,6 +143,8 @@ Correction targeting rules:
 - They have correction-target identity authority only.
 - They are not verified physical truth and must not make the current message evidence.
 - Set correctionRef only when the current user message explicitly revises, corrects, retracts, or replaces one specific candidate.
+- A correction must keep the same category and evidence kind as its target. It may replace the value/content inside that type, but it must never promote, demote, or reclassify an item.
+- If the user's intended revision would change category or evidence kind, put that span in unresolved instead of using correctionRef.
 - A different or later reading of the same subject is not automatically a correction. Repeated measurements, retests, or new observations are new session items unless the user explicitly says the earlier item was wrong, retracted, or replaced.
 - Words that establish another measurement or test, such as "again", "remeasured", "this time", or "now reads", describe new evidence by themselves; they do not establish correction intent.
 - A changed value alone does not establish correction intent. Preserve the earlier item unless the user explicitly corrects it.
@@ -163,6 +165,7 @@ Important rules:
 - Never place the same source span in both items and unresolved.
 - Do not promote a hypothesis into evidence.
 - Do not invent facts.
+- For measurement evidence, copy the reported reading faithfully. Never round, tidy, convert, or substitute a different value. A numeric value must equal a number actually present in sourceText; a nonnumeric value must be literal text present in sourceText.
 - Do not decide whether a diagnosis is correct.
 - sourceText must be copied exactly from the user's message.
 - sourceText must be the shortest exact span that directly supports that item.

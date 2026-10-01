@@ -19,6 +19,73 @@ function normalizedText(value) {
     : "";
 }
 
+function correctionItemType(item) {
+  if (item.category === "evidence") {
+    return `evidence:${item.kind}`;
+  }
+
+  return item.category;
+}
+
+function numericTokens(sourceText) {
+  const normalized = sourceText.replace(/(?<=\d),(?=\d)/g, "");
+  const matches = normalized.match(
+    /(?<![A-Za-z0-9_.])[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?(?![\d.])/g
+  );
+
+  return matches ?? [];
+}
+
+function sourceContainsLiteral(sourceText, value) {
+  const literal = value.trim();
+
+  if (literal.length === 0) {
+    return false;
+  }
+
+  const escaped = literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const leftBoundary = /^[A-Za-z0-9]/.test(literal)
+    ? "(?<![A-Za-z0-9])"
+    : "";
+  const rightBoundary = /[A-Za-z0-9]$/.test(literal)
+    ? "(?![A-Za-z0-9])"
+    : "";
+
+  return new RegExp(
+    `${leftBoundary}${escaped}${rightBoundary}`,
+    "i"
+  ).test(sourceText);
+}
+
+function validateMeasurementValueAttestation(item) {
+  if (
+    item.category !== "evidence" ||
+    item.kind !== "measurement"
+  ) {
+    return;
+  }
+
+  if (typeof item.value === "number") {
+    const supported = numericTokens(item.sourceText).some(
+      (token) => Number(token) === item.value
+    );
+
+    if (!supported) {
+      throw new Error(
+        "measurement value must be supported by the exact sourceText"
+      );
+    }
+
+    return;
+  }
+
+  if (!sourceContainsLiteral(item.sourceText, item.value)) {
+    throw new Error(
+      "measurement value must be supported by the exact sourceText"
+    );
+  }
+}
+
 function correctionCandidateKey(candidate) {
   if (
     candidate.category === "evidence" &&
@@ -84,6 +151,12 @@ function validateExtraction({
       );
     }
 
+    if (correctionItemType(item) !== correctionItemType(candidate)) {
+      throw new Error(
+        "correctionRef cannot change item category or evidence kind"
+      );
+    }
+
     const key = correctionCandidateKey(candidate);
 
     if ((candidateKeyCounts.get(key) ?? 0) > 1) {
@@ -142,6 +215,7 @@ function validateExtraction({
       extractedItem: item,
       userMessage,
     });
+    validateMeasurementValueAttestation(item);
   }
 
   for (const unresolvedItem of normalized.unresolved) {

@@ -205,6 +205,15 @@ function validateCorrection({ items, newItem }) {
     throw new Error("Correction target belongs to another session");
   }
 
+  const oldKind = oldItem.category === "evidence" ? oldItem.kind : null;
+  const newKind = newItem.category === "evidence" ? newItem.kind : null;
+
+  if (oldItem.category !== newItem.category || oldKind !== newKind) {
+    throw new Error(
+      "Correction cannot change item category or evidence kind"
+    );
+  }
+
   const alreadySuperseded = items.some(
     (item) => item.supersedesId === oldItem.id
   );

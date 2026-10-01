@@ -147,6 +147,39 @@ describe("session service", () => {
     ).toThrow("another session");
   });
 
+  it("rejects a correction that changes category or evidence kind", () => {
+    const observation = buildSessionItem({
+      extractedItem: {
+        category: "observation",
+        content: "The LED looks dim",
+        sourceText: "The LED looks dim",
+      },
+      sessionId: SESSION_A,
+      turnId: TURN_1,
+      itemIndex: 0,
+    });
+
+    const promoted = buildSessionItem({
+      extractedItem: {
+        category: "hypothesis",
+        content: "The LED is faulty",
+        sourceText: "The LED is faulty",
+        correctionRef: "candidate-test",
+      },
+      resolvedSupersedesId: observation.id,
+      sessionId: SESSION_A,
+      turnId: TURN_2,
+      itemIndex: 0,
+    });
+
+    expect(() =>
+      validateCorrection({
+        items: [observation],
+        newItem: promoted,
+      })
+    ).toThrow("cannot change item category");
+  });
+
   it("rejects correcting an item that was already superseded", () => {
     const original = buildSessionItem({
       extractedItem: {

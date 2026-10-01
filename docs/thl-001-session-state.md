@@ -23,6 +23,10 @@ For one `(session_id, turn_id)` request:
 
 `correctionRef` is temporary model-facing data. `supersedesId` is backend-owned persisted data. They are not interchangeable.
 
+A correction may only replace an item of the same stored category and, for evidence, the same evidence kind. THL-001 does not allow correction to act as a promotion or reclassification path. If a future ticket needs category-changing revision, it must define a separate attested transition rather than overloading `supersedesId`.
+
+For measurement evidence, the backend also checks that the structured value is actually supported by the exact user quote in `sourceText`. Numeric readings must match a numeric token in that quote; nonnumeric readings must occur literally in it. This prevents the model from silently rounding, tidying, or inventing the persisted reading while still quoting the user correctly.
+
 ## Turn outcomes used by THL-001
 
 A turn is `processing`, `failed`, or `completed`.
@@ -37,6 +41,8 @@ These are persistence outcomes for THL-001. They do not replace the four trouble
 ## History and current state
 
 `getItemsForSession()` returns immutable history, including superseded items. `currentItems()` removes items that have been superseded and is the current-state boundary used when correction context is built. Callers must not treat raw session history as current troubleshooting state.
+
+Currentness is derived from the `supersedesId` graph, not timestamp ordering. Completed-turn replay reads only that turn's items and orders them by the turn-local `itemIndex`, which is unique within `(session_id, turn_id)`. Repeated hypotheses do not gain evidentiary status or support weight in THL-001; no support-counting mechanism exists in this ticket.
 
 ## Retry behavior
 

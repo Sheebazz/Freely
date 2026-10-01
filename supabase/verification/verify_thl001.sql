@@ -146,6 +146,23 @@ SELECT
 UNION ALL
 
 SELECT
+  'correction type guard is installed',
+  CASE WHEN EXISTS (
+    SELECT 1
+    FROM pg_trigger t
+    JOIN pg_class c ON c.oid = t.tgrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    JOIN pg_proc p ON p.oid = t.tgfoid
+    WHERE n.nspname = 'public'
+      AND c.relname = 'session_items'
+      AND t.tgname = 'session_items_correction_type_guard'
+      AND NOT t.tgisinternal
+      AND p.proname = 'enforce_session_item_correction_type'
+  ) THEN 'PASS' ELSE 'FAIL' END
+
+UNION ALL
+
+SELECT
   'service_role session_items is SELECT-only',
   CASE WHEN
     has_table_privilege('service_role', 'public.session_items', 'SELECT')
