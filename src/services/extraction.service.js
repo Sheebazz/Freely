@@ -101,12 +101,11 @@ function correctionCandidateKey(candidate) {
     return `test_result:${normalizedText(candidate.test)}`;
   }
 
-  if (candidate.category === "observation") {
-    return "observation";
-  }
-
-  if (candidate.category === "hypothesis") {
-    return "hypothesis";
+  if (
+    candidate.category === "observation" ||
+    candidate.category === "hypothesis"
+  ) {
+    return null;
   }
 
   throw new Error("Unsupported correction candidate");
@@ -125,10 +124,13 @@ function validateExtraction({
 
   for (const candidate of correctionCandidates) {
     const key = correctionCandidateKey(candidate);
-    candidateKeyCounts.set(
-      key,
-      (candidateKeyCounts.get(key) ?? 0) + 1
-    );
+
+    if (key !== null) {
+      candidateKeyCounts.set(
+        key,
+        (candidateKeyCounts.get(key) ?? 0) + 1
+      );
+    }
   }
 
   const acceptedItems = [];
@@ -159,7 +161,10 @@ function validateExtraction({
 
     const key = correctionCandidateKey(candidate);
 
-    if ((candidateKeyCounts.get(key) ?? 0) > 1) {
+    if (
+      key !== null &&
+      (candidateKeyCounts.get(key) ?? 0) > 1
+    ) {
       backendUnresolved.push({
         sourceText: item.sourceText,
         reason:

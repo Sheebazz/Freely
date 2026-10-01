@@ -24,6 +24,7 @@ For one `(session_id, turn_id)` request:
 `correctionRef` is temporary model-facing data. `supersedesId` is backend-owned persisted data. They are not interchangeable.
 
 A correction may only replace an item of the same stored category and, for evidence, the same evidence kind. THL-001 does not allow correction to act as a promotion or reclassification path. If a future ticket needs category-changing revision, it must define a separate attested transition rather than overloading `supersedesId`.
+The same invariant is enforced inside `finalize_turn()`, the SECURITY DEFINER persistence boundary for `session_items`, so a caller cannot bypass the Node validation by invoking finalization directly.
 
 For measurement evidence, the backend also checks that the structured value is actually supported by the exact user quote in `sourceText`. Numeric readings must match a numeric token in that quote; nonnumeric readings must occur literally in it. This prevents the model from silently rounding, tidying, or inventing the persisted reading while still quoting the user correctly.
 

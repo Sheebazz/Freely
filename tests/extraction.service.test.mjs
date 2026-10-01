@@ -609,6 +609,93 @@ describe("extraction service", () => {
   });
 
 
+  it("allows a ref-targeted observation correction when unrelated observations are also current", async () => {
+    const provider = {
+      async extract() {
+        return {
+          items: [
+            {
+              category: "observation",
+              content: "The LED is dim",
+              sourceText: "Actually the LED is dim, not dark",
+              correctionRef: "candidate-led",
+            },
+          ],
+          unresolved: [],
+        };
+      },
+
+      async repair() {
+        throw new Error("repair should not be called");
+      },
+    };
+
+    const result = await extractUserMessage({
+      provider,
+      userMessage: "Actually the LED is dim, not dark.",
+      correctionCandidates: [
+        {
+          ref: "candidate-led",
+          category: "observation",
+          content: "The LED stays dark",
+        },
+        {
+          ref: "candidate-smoke",
+          category: "observation",
+          content: "There is no smoke",
+        },
+      ],
+    });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].correctionRef).toBe("candidate-led");
+    expect(result.unresolved).toHaveLength(0);
+  });
+
+  it("allows a ref-targeted hypothesis correction when unrelated hypotheses are also current", async () => {
+    const provider = {
+      async extract() {
+        return {
+          items: [
+            {
+              category: "hypothesis",
+              content: "R2 may be open",
+              sourceText: "Actually I think R2 may be open, not R1",
+              correctionRef: "candidate-r1",
+            },
+          ],
+          unresolved: [],
+        };
+      },
+
+      async repair() {
+        throw new Error("repair should not be called");
+      },
+    };
+
+    const result = await extractUserMessage({
+      provider,
+      userMessage: "Actually I think R2 may be open, not R1.",
+      correctionCandidates: [
+        {
+          ref: "candidate-r1",
+          category: "hypothesis",
+          content: "R1 may be open",
+        },
+        {
+          ref: "candidate-u1",
+          category: "hypothesis",
+          content: "U1 may be faulty",
+        },
+      ],
+    });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].correctionRef).toBe("candidate-r1");
+    expect(result.unresolved).toHaveLength(0);
+  });
+
+
   it("downgrades a guessed correction target when multiple structurally matching current items exist", async () => {
     const provider = {
       async extract() {
