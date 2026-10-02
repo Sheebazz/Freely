@@ -166,3 +166,43 @@ Node's nonblank trusted-source rule. Non-breaking, ideographic and BOM-only sour
 IDs are rejected by raw-RPC regression cases. Preflight and migration audit identify
 existing incompatible records; migration aborts without inventing replacements.
 This is scoped to the promised trusted-source contract, not generic JSONB hardening.
+
+## Lars review: numeric separators and runtime wiring
+
+Numeric token boundaries accept list punctuation after a complete reading, e.g.
+`TP1 reads 4.8, TP2 reads 5.0`. A digit immediately after comma/underscore remains
+ambiguous unless a complete valid thousands group consumes it. Removing that
+protection entirely would reintroduce truncated decimal-comma readings. Regression
+cases cover both readings, a span ending at a comma, valid thousands grouping,
+underscore punctuation, malformed grouping, and extraction without a repair call.
+
+### Coverage and sequencing
+
+The current production service `processUserTurn` performs **user-message
+extraction only**. It calls `buildSessionItem`, not `buildModelHypothesis` or
+`buildTrustedCircuitFact`. There is no troubleshooting reasoning provider or
+circuit-ingestion runtime in this branch. These builders are deliberately backend
+entry contracts for those future paths, not a claim that an end-to-end reasoning
+loop already calls them. Routing extracted user claims through the model builder
+would incorrectly change their provenance and is not an appropriate wiring fix.
+
+| Requirement | Current coverage | Remaining runtime work |
+| --- | --- | --- |
+| User claims remain unverified | Extraction/turn processing and persistence tests | None for this extraction path |
+| Model causal/identity claims cannot grant themselves authority | Forced-hypothesis builder tests; raw-RPC forged-status and persisted-repeat integration tests; database-generated status | Connect actual reasoning-provider output to the builder |
+| Trusted metadata requires explicit backend authority | Typed builder, database constraints and session-isolation integration tests | Connect curated circuit data to the owning session |
+
+The later reasoning-engine work identified as THL-003/THL-004 in the THL-001
+architecture notes owns the planned integration. This sequencing must be
+acknowledged in review; schema/builder/persistence coverage must not be described
+as a completed runtime reasoning path. If THL-002 is required to include that
+end-to-end path now, the scope must include the actual reasoning provider and
+outcome contract rather than an otherwise unused adapter.
+
+Before the reasoning loop is considered complete, its integration tests must
+exercise real orchestration: a provider-generated diagnosis claiming established
+status, repeated diagnoses beside consistent measurements, model provenance on
+persisted items, and replay without another provider call. Every generated
+causal/identity claim must enter through `buildModelHypothesis` before the single
+atomic finalization RPC. Trusted circuit metadata must enter through the typed
+trusted builder from curated backend data and stay isolated by session.

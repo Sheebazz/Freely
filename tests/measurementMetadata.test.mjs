@@ -60,4 +60,37 @@ describe('measurement metadata authority', () => {
     expect(check(make("input reads 5.02.")).items[0].unit).toBeNull();
   });
 
+  it.each([
+    ["TP1 reads 4.8, TP2 reads 5.0", "TP1", 4.8],
+    ["TP1 reads 4.8, TP2 reads 5.0", "TP2", 5],
+    ["input readings: 4.8, 5.0", "input", 4.8],
+    ["input reads 4.8,", "input", 4.8],
+    ["input reads 1,234, next reading pending", "input", 1234],
+    ["input reads 4.8_note", "input", 4.8],
+  ])("accepts a complete reading before separator punctuation: %s", (source, subject, value) => {
+    expect(check(make(source, { subject, value })).items[0].value).toBe(value);
+  });
+
+  it("extracts two comma-separated measurements without repair", async () => {
+    let repairs = 0;
+    const userMessage = "TP1 reads 4.8, TP2 reads 5.0";
+    const result = await extractUserMessage({ userMessage, provider: {
+      extract: async () => ({ items: [
+        make("TP1 reads 4.8,", { subject: "TP1", value: 4.8 }),
+        make("TP2 reads 5.0", { subject: "TP2", value: 5 }),
+      ], unresolved: [] }),
+      repair: async () => { repairs++; throw new Error("Valid list must not need repair"); },
+    } });
+    expect(result.items.map(item => item.value)).toEqual([4.8, 5]);
+    expect(repairs).toBe(0);
+  });
+
+  it.each([
+    ["input reads 1,23", [1, 23, 123]],
+    ["input reads 12_345", [12, 345, 12345]],
+    ["input reads 1,234,56", [1, 1234, 56, 123456]],
+  ])("does not truncate ambiguous digit-connected punctuation: %s", (source, values) => {
+    for (const value of values) expect(() => check(make(source, { value }))).toThrow(/value/);
+  });
+
 });

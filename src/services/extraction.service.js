@@ -29,9 +29,11 @@ function correctionItemType(item) {
 
 function numericTokens(sourceText) {
   // Accept complete numbers, including well-formed thousands grouping.
-  // A decimal comma is ambiguous; never delete it and silently change scale.
+  // List punctuation may follow a reading. A comma/underscore followed by a
+  // digit is still ambiguous unless the complete thousands-group alternative
+  // consumes it; never split or delete it and silently change scale.
   const matches = sourceText.match(
-    /(?<![\p{L}\p{N}_.+,])[-+]?(?:\d{1,3}(?:,\d{3})+(?:\.\d*)?|\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?(?![\d,_]|\.\d|\.\.)/gu
+    /(?<![\p{L}\p{N}_.+,])[-+]?(?:\d{1,3}(?:,\d{3})+(?:\.\d*)?|\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?(?!\d|[,_](?=\d)|\.\d|\.\.)/gu
   );
 
   return matches ?? [];
