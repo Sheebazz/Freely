@@ -28,9 +28,12 @@ function correctionItemType(item) {
 }
 
 function numericTokens(sourceText) {
-  const normalized = sourceText.replace(/(?<=\d),(?=\d)/g, "");
-  const matches = normalized.match(
-    /(?<![A-Za-z0-9_.])[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?(?![\d.])/g
+  // Accept complete numbers, including well-formed thousands grouping.
+  // List punctuation may follow a reading. A comma/underscore followed by a
+  // digit is still ambiguous unless the complete thousands-group alternative
+  // consumes it; never split or delete it and silently change scale.
+  const matches = sourceText.match(
+    /(?<![\p{L}\p{N}_.+,])[-+]?(?:\d{1,3}(?:,\d{3})+(?:\.\d*)?|\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?(?!\d|[,_](?=\d)|\.\d|\.\.)/gu
   );
 
   return matches ?? [];
@@ -67,7 +70,7 @@ function validateMeasurementValueAttestation(item) {
 
   if (typeof item.value === "number") {
     const supported = numericTokens(item.sourceText).some(
-      (token) => Number(token) === item.value
+      (token) => Number(token.replaceAll(",", "")) === item.value
     );
 
     if (!supported) {
@@ -85,6 +88,56 @@ function validateMeasurementValueAttestation(item) {
     );
   }
 }
+
+function validateTestResultAttestation(item) {
+  if (
+    item.category !== "evidence" ||
+    item.kind !== "test_result"
+  ) {
+    return;
+  }
+
+  if (!sourceContainsLiteral(item.sourceText, item.result)) {
+    throw new Error(
+      "test result must be supported by the exact sourceText"
+    );
+  }
+}
+
+// Unit spelling may be normalized, but never its scale or case-sensitive symbol.
+const UNIT_SPELLINGS = {
+  V: ["V", "volt", "volts"], mV: ["mV", "millivolt", "millivolts"],
+  A: ["A", "amp", "amps", "ampere", "amperes"],
+  mA: ["mA", "milliamp", "milliamps", "milliampere", "milliamperes"],
+  ohm: ["ohm", "ohms", "Ω"], Hz: ["Hz", "hertz"],
+};
+
+function validateMeasurementMetadata(item, turnContext) {
+  if (item.category !== "evidence" || item.kind !== "measurement") return;
+  const subjectInSource = sourceContainsLiteral(item.sourceText, item.subject);
+  const subjectFromContext = turnContext?.expectedResponseType === "measurement"
+    && item.subject === turnContext.requestedSubject;
+  if (!subjectInSource && !subjectFromContext) {
+    throw new Error("measurement subject must be literal source text or the exact backend requestedSubject");
+  }
+  if (item.unit !== null) {
+    const spellings = Object.hasOwn(UNIT_SPELLINGS, item.unit)
+      ? UNIT_SPELLINGS[item.unit] : [item.unit];
+    const readings = typeof item.value === "number"
+      ? numericTokens(item.sourceText).filter(token => Number(token.replaceAll(",", "")) === item.value)
+      : [item.value.trim()];
+    const escape = text => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const supported = spellings.some((spelling) => readings.some((reading) => {
+      // Bind the unit to this reading, not to an identifier or another value.
+      const pattern = `(?<![\\p{L}\\p{N}_.,])${escape(reading)}\\s*${escape(spelling)}(?![\\p{L}\\p{N}_])`;
+      const flags = spelling.length > 2 && /^[a-z]+$/.test(spelling) ? "iu" : "u";
+      return new RegExp(pattern, flags).test(item.sourceText);
+    }));
+
+    if (!supported) throw new Error("measurement unit must be explicitly supported by sourceText without changing scale");
+  }
+}
+
 
 function correctionCandidateKey(candidate) {
   if (
@@ -115,6 +168,7 @@ function validateExtraction({
   output,
   userMessage,
   correctionCandidates = [],
+  turnContext = null,
 }) {
   const parsed = extractionResponseSchema.parse(output);
   const candidatesByRef = new Map(
@@ -221,6 +275,8 @@ function validateExtraction({
       userMessage,
     });
     validateMeasurementValueAttestation(item);
+    validateMeasurementMetadata(item, turnContext);
+    validateTestResultAttestation(item);
   }
 
   for (const unresolvedItem of normalized.unresolved) {
@@ -282,6 +338,7 @@ async function extractUserMessage({
       output: firstOutput,
       userMessage,
       correctionCandidates: parsedCorrectionCandidates,
+      turnContext: parsedTurnContext,
     });
   } catch (firstError) {
     if (typeof provider.repair !== "function") {
@@ -301,6 +358,7 @@ async function extractUserMessage({
         output: repairedOutput,
         userMessage,
         correctionCandidates: parsedCorrectionCandidates,
+        turnContext: parsedTurnContext,
       });
     } catch (repairError) {
       return {

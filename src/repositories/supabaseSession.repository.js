@@ -16,6 +16,7 @@ function toDatabaseItem(item) {
     item_index: parsed.itemIndex,
     category: parsed.category,
     kind: parsed.kind ?? null,
+    fact_type: parsed.factType ?? null,
     content: parsed.content,
     source_text: parsed.sourceText,
     subject: parsed.subject ?? null,
@@ -37,9 +38,10 @@ function fromDatabaseItem(row) {
     itemIndex: row.item_index,
     category: row.category,
     ...(row.kind !== null ? { kind: row.kind } : {}),
+    ...(row.kind === "trusted_fact" ? { factType: row.fact_type } : {}),
     content: row.content,
     sourceText: row.source_text,
-    ...(row.kind === "measurement"
+    ...(row.kind === "measurement" || row.kind === "trusted_fact"
       ? {
           subject: row.subject,
           value: row.value,
@@ -49,6 +51,7 @@ function fromDatabaseItem(row) {
     ...(row.test !== null ? { test: row.test } : {}),
     ...(row.result !== null ? { result: row.result } : {}),
     provenance: row.provenance,
+    verificationStatus: row.verification_status,
     supersedesId: row.supersedes_id,
     createdAt: row.created_at,
   });

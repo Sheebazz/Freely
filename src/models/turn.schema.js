@@ -12,7 +12,7 @@ const semanticAmbiguityPayloadSchema = z.object({
 
 const extractionUnrecoverablePayloadSchema = z.object({
   reason: z.literal("extraction_unrecoverable"),
-  detail: z.string().min(1).max(1500),
+  detail: z.string().min(1).max(1500).refine((value) => value.trim().length > 0),
 }).strict();
 
 const clarificationPayloadSchema = z.union([

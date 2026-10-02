@@ -194,4 +194,31 @@ describe("turn processing integration", () => {
       await cleanupSession(sessionId);
     }
   }, 30000);
+  it("keeps a repeated unsupported user diagnosis unverified across persisted turns", async () => {
+    const sessionId = randomUUID();
+    const userMessage = "The regulator is faulty.";
+    const provider = {
+      extract: vi.fn().mockResolvedValue({
+        items: [{ category: "hypothesis", content: userMessage,
+          sourceText: userMessage, correctionRef: null }],
+        unresolved: [],
+      }),
+    };
+    try {
+      await createSession({ id: sessionId, circuitId: "circuit-one",
+        createdAt: new Date().toISOString() });
+      for (let index = 0; index < 3; index += 1) {
+        await processUserTurn({ repository: supabaseRepository, provider,
+          sessionId, turnId: randomUUID(), userMessage });
+      }
+      const items = await getItemsForSession(sessionId);
+      expect(items).toHaveLength(3);
+      expect(items.every((item) => item.category === "hypothesis"
+        && item.verificationStatus === "unverified"
+        && item.provenance.actor === "user")).toBe(true);
+    } finally {
+      await cleanupSession(sessionId);
+    }
+  }, 30000);
+
 });

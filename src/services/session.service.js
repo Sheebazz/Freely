@@ -19,6 +19,14 @@ function validateSourceText({ extractedItem, userMessage }) {
   return true;
 }
 
+function verificationStatusFor(item) {
+  if (item.category === "evidence") {
+    return "established";
+  }
+
+  return "unverified";
+}
+
 function provenanceFor(item) {
   if (item.category === "observation") {
     return {
@@ -83,9 +91,84 @@ function buildSessionItem({
     createdAt,
     supersedesId: resolvedSupersedesId,
     provenance: provenanceFor(parsedExtractedItem),
+    verificationStatus: verificationStatusFor(parsedExtractedItem),
   };
 
   return sessionItemSchema.parse(storedItem);
+}
+
+function buildModelHypothesis({
+  modelOutput,
+  sessionId,
+  turnId,
+  itemIndex,
+  createdAt = new Date().toISOString(),
+}) {
+  if (!modelOutput || typeof modelOutput.content !== "string" || !modelOutput.content.trim()) {
+    throw new Error("modelOutput.content is required");
+  }
+
+  const sourceText =
+    typeof modelOutput.sourceText === "string" && modelOutput.sourceText.trim()
+      ? modelOutput.sourceText
+      : modelOutput.content;
+
+  return sessionItemSchema.parse({
+    id: randomUUID(),
+    sessionId,
+    turnId,
+    itemIndex,
+    createdAt,
+    supersedesId: null,
+    category: "hypothesis",
+    verificationStatus: "unverified",
+    content: modelOutput.content,
+    sourceText,
+    provenance: {
+      actor: "model",
+      method: "generated_hypothesis",
+    },
+  });
+}
+
+function buildTrustedCircuitFact({
+  fact,
+  trustedSourceId,
+  sessionId,
+  turnId,
+  itemIndex,
+  createdAt = new Date().toISOString(),
+}) {
+  if (typeof trustedSourceId !== "string" || !trustedSourceId.trim()) {
+    throw new Error("trustedSourceId is required for a trusted circuit fact");
+  }
+
+  if (!fact || typeof fact !== "object") {
+    throw new Error("fact is required");
+  }
+
+  return sessionItemSchema.parse({
+    id: randomUUID(),
+    sessionId,
+    turnId,
+    itemIndex,
+    createdAt,
+    supersedesId: null,
+    category: "evidence",
+    kind: "trusted_fact",
+    factType: fact.factType,
+    verificationStatus: "established",
+    subject: fact.subject,
+    value: fact.value,
+    unit: fact.unit ?? null,
+    content: fact.content,
+    sourceText: fact.sourceText,
+    provenance: {
+      actor: "system",
+      method: "trusted_circuit_fact",
+      sourceId: trustedSourceId,
+    },
+  });
 }
 
 function currentItems(items) {
@@ -113,7 +196,9 @@ function buildCorrectionContext(items) {
     );
   }
 
-  const activeItems = currentItems(parsedItems);
+  const activeItems = currentItems(parsedItems).filter(
+    (item) => item.provenance.actor === "user"
+  );
   const targets = new Map();
 
   const candidates = activeItems.map((item) => {
@@ -224,6 +309,8 @@ function validateCorrection({ items, newItem }) {
 }
 
 module.exports = {
+  buildModelHypothesis,
+  buildTrustedCircuitFact,
   buildCorrectionContext,
   buildSessionItem,
   currentItems,

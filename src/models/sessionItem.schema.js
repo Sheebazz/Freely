@@ -1,5 +1,7 @@
 const { z } = require("zod");
 
+const verificationStatusSchema = z.enum(["established", "unverified"]);
+
 const backendFieldsSchema = z.object({
   id: z.string().uuid(),
   sessionId: z.string().uuid(),
@@ -19,8 +21,23 @@ const userProvenanceSchema = z.object({
   ]),
 }).strict();
 
+const modelHypothesisProvenanceSchema = z.object({
+  actor: z.literal("model"),
+  method: z.literal("generated_hypothesis"),
+}).strict();
+
+const trustedFactProvenanceSchema = z.object({
+  actor: z.literal("system"),
+  method: z.literal("trusted_circuit_fact"),
+  sourceId: z.string().min(1).max(200).refine(
+    (value) => /\S/u.test(value),
+    "sourceId must contain a non-whitespace character"
+  ),
+}).strict();
+
 const observationSchema = backendFieldsSchema.extend({
   category: z.literal("observation"),
+  verificationStatus: z.literal("unverified"),
   content: z.string().min(1),
   sourceText: z.string().min(1).max(1000),
   provenance: userProvenanceSchema.extend({
@@ -31,6 +48,7 @@ const observationSchema = backendFieldsSchema.extend({
 const measurementEvidenceSchema = backendFieldsSchema.extend({
   category: z.literal("evidence"),
   kind: z.literal("measurement"),
+  verificationStatus: z.literal("established"),
   subject: z.string().min(1),
   value: z.union([
     z.number(),
@@ -47,6 +65,7 @@ const measurementEvidenceSchema = backendFieldsSchema.extend({
 const testResultEvidenceSchema = backendFieldsSchema.extend({
   category: z.literal("evidence"),
   kind: z.literal("test_result"),
+  verificationStatus: z.literal("established"),
   test: z.string().min(1),
   result: z.string().min(1),
   content: z.string().min(1),
@@ -56,8 +75,26 @@ const testResultEvidenceSchema = backendFieldsSchema.extend({
   }),
 }).strict();
 
-const hypothesisSchema = backendFieldsSchema.extend({
+const trustedFactEvidenceSchema = backendFieldsSchema.extend({
+  category: z.literal("evidence"),
+  kind: z.literal("trusted_fact"),
+  factType: z.enum(["topology", "rating", "label", "part_number"]),
+  verificationStatus: z.literal("established"),
+  subject: z.string().min(1),
+  value: z.union([
+    z.number(),
+    z.string().min(1),
+    z.boolean(),
+  ]),
+  unit: z.string().min(1).nullable(),
+  content: z.string().min(1),
+  sourceText: z.string().min(1).max(1000),
+  provenance: trustedFactProvenanceSchema,
+}).strict();
+
+const userHypothesisSchema = backendFieldsSchema.extend({
   category: z.literal("hypothesis"),
+  verificationStatus: z.literal("unverified"),
   content: z.string().min(1),
   sourceText: z.string().min(1).max(1000),
   provenance: userProvenanceSchema.extend({
@@ -65,17 +102,36 @@ const hypothesisSchema = backendFieldsSchema.extend({
   }),
 }).strict();
 
+const modelHypothesisSchema = backendFieldsSchema.extend({
+  category: z.literal("hypothesis"),
+  verificationStatus: z.literal("unverified"),
+  content: z.string().min(1),
+  sourceText: z.string().min(1).max(1000),
+  provenance: modelHypothesisProvenanceSchema,
+}).strict();
+
+const hypothesisSchema = z.union([
+  userHypothesisSchema,
+  modelHypothesisSchema,
+]);
+
 const sessionItemSchema = z.union([
   observationSchema,
   measurementEvidenceSchema,
   testResultEvidenceSchema,
-  hypothesisSchema,
+  trustedFactEvidenceSchema,
+  userHypothesisSchema,
+  modelHypothesisSchema,
 ]);
 
 module.exports = {
+  verificationStatusSchema,
   sessionItemSchema,
   observationSchema,
   measurementEvidenceSchema,
   testResultEvidenceSchema,
+  trustedFactEvidenceSchema,
   hypothesisSchema,
+  userHypothesisSchema,
+  modelHypothesisSchema,
 };
