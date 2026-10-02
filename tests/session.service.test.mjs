@@ -4,7 +4,9 @@ import sessionService from "../src/services/session.service.js";
 
 const {
   buildCorrectionContext,
+  buildModelHypothesis,
   buildSessionItem,
+  buildTrustedCircuitFact,
   currentItems,
   resolveCorrectionRef,
   validateCorrection,
@@ -37,6 +39,7 @@ describe("session service", () => {
       actor: "user",
       method: "reported_observation",
     });
+    expect(item.verificationStatus).toBe("unverified");
   });
 
   it("backend stamps measurement provenance", () => {
@@ -56,6 +59,7 @@ describe("session service", () => {
     });
 
     expect(item.provenance.method).toBe("reported_measurement");
+    expect(item.verificationStatus).toBe("established");
   });
 
   it("backend stamps hypothesis provenance without promoting it", () => {
@@ -72,7 +76,141 @@ describe("session service", () => {
 
     expect(item.category).toBe("hypothesis");
     expect(item.provenance.method).toBe("reported_claim");
-    expect(item.established).toBeUndefined();
+    expect(item.verificationStatus).toBe("unverified");
+  });
+
+  it("records a model claim as an unverified model hypothesis even if it claims authority", () => {
+    const item = buildModelHypothesis({
+      modelOutput: {
+        content: "The regulator is faulty",
+        sourceText: "The regulator is faulty",
+        verificationStatus: "established",
+        category: "fact",
+      },
+      sessionId: SESSION_A,
+      turnId: TURN_1,
+      itemIndex: 0,
+    });
+
+    expect(item.category).toBe("hypothesis");
+    expect(item.verificationStatus).toBe("unverified");
+    expect(item.provenance).toEqual({
+      actor: "model",
+      method: "generated_hypothesis",
+    });
+  });
+
+  it("keeps a model diagnosis unverified even when established measurement evidence exists", () => {
+    const measurement = buildSessionItem({
+      extractedItem: {
+        category: "evidence",
+        kind: "measurement",
+        subject: "REG_OUT",
+        value: 0,
+        unit: "V",
+        content: "REG_OUT measured 0 V",
+        sourceText: "REG_OUT measured 0 V",
+      },
+      sessionId: SESSION_A,
+      turnId: TURN_1,
+      itemIndex: 0,
+    });
+
+    const diagnosis = buildModelHypothesis({
+      modelOutput: { content: "The regulator is faulty" },
+      sessionId: SESSION_A,
+      turnId: TURN_1,
+      itemIndex: 1,
+    });
+
+    expect(measurement.verificationStatus).toBe("established");
+    expect(diagnosis.verificationStatus).toBe("unverified");
+  });
+
+  it("builds an established trusted circuit fact only from an explicit trusted source", () => {
+    const item = buildTrustedCircuitFact({
+      fact: {
+        factType: "rating",
+        subject: "R3 nominal resistance",
+        value: 330,
+        unit: "ohm",
+        content: "R3 nominal resistance is 330 ohm",
+        sourceText: "R3 nominal resistance is 330 ohm",
+      },
+      trustedSourceId: "circuit-one",
+      sessionId: SESSION_A,
+      turnId: TURN_1,
+      itemIndex: 0,
+    });
+
+    expect(item.verificationStatus).toBe("established");
+    expect(item.provenance).toEqual({
+      actor: "system",
+      method: "trusted_circuit_fact",
+      sourceId: "circuit-one",
+    });
+  });
+
+  it("does not offer model hypotheses or trusted facts as user correction candidates", () => {
+    const userObservation = buildSessionItem({
+      extractedItem: {
+        category: "observation",
+        content: "The LED stays dark",
+        sourceText: "The LED stays dark",
+      },
+      sessionId: SESSION_A,
+      turnId: TURN_1,
+      itemIndex: 0,
+    });
+
+    const modelHypothesis = buildModelHypothesis({
+      modelOutput: { content: "The regulator may be faulty" },
+      sessionId: SESSION_A,
+      turnId: TURN_1,
+      itemIndex: 1,
+    });
+
+    const trustedFact = buildTrustedCircuitFact({
+      fact: {
+        factType: "rating",
+        subject: "R3 nominal resistance",
+        value: 330,
+        unit: "ohm",
+        content: "R3 nominal resistance is 330 ohm",
+        sourceText: "R3 nominal resistance is 330 ohm",
+      },
+      trustedSourceId: "circuit-one",
+      sessionId: SESSION_A,
+      turnId: TURN_1,
+      itemIndex: 2,
+    });
+
+    const { candidates } = buildCorrectionContext([
+      userObservation,
+      modelHypothesis,
+      trustedFact,
+    ]);
+
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].category).toBe("observation");
+  });
+
+  it("does not promote a repeated unsupported claim", () => {
+    const claims = [TURN_1, TURN_2].map((turnId, itemIndex) =>
+      buildSessionItem({
+        extractedItem: {
+          category: "hypothesis",
+          content: "The regulator is faulty",
+          sourceText: "The regulator is faulty",
+        },
+        sessionId: SESSION_A,
+        turnId,
+        itemIndex,
+      })
+    );
+
+    expect(claims.every((item) => item.verificationStatus === "unverified"))
+      .toBe(true);
   });
 
   it("current view removes stale superseded items", () => {
@@ -403,6 +541,16 @@ describe("session service", () => {
         itemIndex: 0,
       })
     ).toThrow("must be provided together");
+  });
+
+  it("rejects diagnostic facts and missing metadata type at the trusted builder", () => {
+    for (const factType of ["diagnosis", "causal_claim", undefined]) {
+      expect(() => buildTrustedCircuitFact({
+        fact: { factType, subject: "U3", value: "faulty", unit: null,
+          content: "U3 is faulty", sourceText: "U3 is faulty" },
+        trustedSourceId: "fixture", sessionId: SESSION_ID, turnId: TURN_ID, itemIndex: 0,
+      })).toThrow();
+    }
   });
 
 });

@@ -173,4 +173,51 @@ describe("Gemini extractor semantic regression", () => {
     expect(result.unresolved).toHaveLength(1);
   }, 30000);
 
+  it("keeps an appearance-based component identity as a hypothesis", async () => {
+    const result = await extractUserMessage({
+      provider,
+      userMessage: "It looks like a 555, so I think that is U1.",
+    });
+
+    // Multiple distinct identity claims may be extracted from these clauses.
+    // The safety contract concerns classification, not an arbitrary item count.
+    expect(result.items.length, JSON.stringify(result)).toBeGreaterThan(0);
+    expect(result.items.every((item) => item.category === "hypothesis"),
+      JSON.stringify(result)).toBe(true);
+    expect(result.items.some((item) => item.sourceText.includes("555"))).toBe(true);
+    expect(result.unresolved).toHaveLength(0);
+  }, 30000);
+
+  it("does not manufacture a measurement from an expected voltage", async () => {
+    const result = await extractUserMessage({
+      provider,
+      userMessage: "TP1 should be 5 V.",
+      turnContext: {
+        expectedResponseType: "measurement",
+        requestedSubject: "TP1 voltage relative to ground",
+      },
+    });
+    expect(result.items).toHaveLength(0);
+    expect(result.unresolved.length).toBeGreaterThan(0);
+  }, 30000);
+
+  it("does not treat a plausible voltage span in an unperformed test as evidence", async () => {
+    const result = await extractUserMessage({ provider,
+      userMessage: "I have not measured TP1; I only expect TP1 to read 5.02 V.",
+      turnContext: { expectedResponseType: "measurement", requestedSubject: "TP1 voltage relative to ground" },
+    });
+    expect(result.status === "clarification_required" ||
+      result.items.every(item => item.category !== "evidence"), JSON.stringify(result)).toBe(true);
+  }, 30000);
+
+  it("does not invent volts for a unitless instrument reading", async () => {
+    const result = await extractUserMessage({ provider,
+      userMessage: "I measured 5.02 at the input.",
+    });
+    // Either honest clarification or a reading with explicitly unknown unit is safe.
+    expect(result.status === "clarification_required" || result.items.every(item =>
+      item.category !== "evidence" || item.kind !== "measurement" || item.unit === null),
+      JSON.stringify(result)).toBe(true);
+  }, 30000);
+
 });

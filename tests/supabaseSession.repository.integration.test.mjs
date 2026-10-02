@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
+import { clarificationCases } from "./fixtures/clarificationCases.mjs";
+import turnModels from "../src/models/turn.schema.js";
 import supabaseRepository from "../src/repositories/supabaseSession.repository.js";
 import sessionService from "../src/services/session.service.js";
 import supabaseConfig from "../src/config/supabase.js";
@@ -16,7 +18,7 @@ const {
   retryFailedTurn,
 } = supabaseRepository;
 
-const { buildSessionItem } = sessionService;
+const { buildModelHypothesis, buildSessionItem, buildTrustedCircuitFact } = sessionService;
 const { supabase } = supabaseConfig;
 
 const acceptedCompletion = {
@@ -127,9 +129,12 @@ describe("Supabase session repository integration", () => {
       const recalled = await getItemsForTurn({ sessionId, turnId });
       expect(recalled).toHaveLength(3);
       expect(recalled[0].content).toBe("The LED stays dark");
+      expect(recalled[0].verificationStatus).toBe("unverified");
+      expect(recalled[1].verificationStatus).toBe("established");
       expect(recalled[1].value).toBe(4.8);
       expect(typeof recalled[1].value).toBe("number");
       expect(recalled[2].value).toBe("OL");
+      expect(recalled[2].verificationStatus).toBe("established");
       expect(typeof recalled[2].value).toBe("string");
 
       const sessionItems = await getItemsForSession(sessionId);
@@ -689,4 +694,338 @@ describe("Supabase session repository integration", () => {
       await cleanupSessions([sessionId]);
     }
   }, 15000);
+
+  it("derives an unverified status for a model hypothesis even if the payload claims established", async () => {
+    const sessionId = randomUUID();
+    const turnId = randomUUID();
+    const createdAt = new Date().toISOString();
+
+    try {
+      await createSession({ id: sessionId, circuitId: "circuit-one", createdAt });
+      await createTestTurn({ id: turnId, sessionId });
+
+      const modelHypothesis = buildModelHypothesis({
+        modelOutput: {
+          content: "The regulator is faulty",
+          verificationStatus: "established",
+        },
+        sessionId,
+        turnId,
+        itemIndex: 0,
+      });
+
+      await finalizeTurn({
+        id: turnId,
+        sessionId,
+        items: [modelHypothesis],
+        completion: acceptedCompletion,
+      });
+
+      const [stored] = await getItemsForTurn({ sessionId, turnId });
+      expect(stored.category).toBe("hypothesis");
+      expect(stored.provenance.actor).toBe("model");
+      expect(stored.verificationStatus).toBe("unverified");
+    } finally {
+      await cleanupSessions([sessionId]);
+    }
+  }, 15000);
+
+  it("persists an explicitly trusted circuit fact as established", async () => {
+    const sessionId = randomUUID();
+    const turnId = randomUUID();
+    const createdAt = new Date().toISOString();
+
+    try {
+      await createSession({ id: sessionId, circuitId: "circuit-one", createdAt });
+      await createTestTurn({ id: turnId, sessionId });
+
+      const trustedFact = buildTrustedCircuitFact({
+        fact: {
+          factType: "rating",
+          subject: "R3 nominal resistance",
+          value: 330,
+          unit: "ohm",
+          content: "R3 nominal resistance is 330 ohm",
+          sourceText: "R3 nominal resistance is 330 ohm",
+        },
+        trustedSourceId: "circuit-one",
+        sessionId,
+        turnId,
+        itemIndex: 0,
+      });
+
+      await finalizeTurn({
+        id: turnId,
+        sessionId,
+        items: [trustedFact],
+        completion: acceptedCompletion,
+      });
+
+      const [stored] = await getItemsForTurn({ sessionId, turnId });
+      expect(stored.kind).toBe("trusted_fact");
+      expect(stored.provenance).toEqual({
+        actor: "system",
+        method: "trusted_circuit_fact",
+        sourceId: "circuit-one",
+      });
+      expect(stored.verificationStatus).toBe("established");
+    } finally {
+      await cleanupSessions([sessionId]);
+    }
+  }, 15000);
+
+  it("rejects model-authored evidence at the database persistence boundary", async () => {
+    const sessionId = randomUUID();
+    const turnId = randomUUID();
+    const createdAt = new Date().toISOString();
+
+    try {
+      await createSession({ id: sessionId, circuitId: "circuit-one", createdAt });
+      await createTestTurn({ id: turnId, sessionId });
+
+      const { error } = await supabase.rpc("finalize_turn", {
+        p_session_id: sessionId,
+        p_turn_id: turnId,
+        p_items: [{
+          id: randomUUID(),
+          session_id: sessionId,
+          turn_id: turnId,
+          item_index: 0,
+          category: "evidence",
+          kind: "measurement",
+          content: "TP1 measured 5 V",
+          source_text: "TP1 measured 5 V",
+          subject: "TP1",
+          value: 5,
+          unit: "V",
+          test: null,
+          result: null,
+          provenance: {
+            actor: "model",
+            method: "generated_hypothesis",
+          },
+          supersedes_id: null,
+          created_at: new Date().toISOString(),
+        }],
+        p_completion_kind: "accepted",
+        p_completion_payload: null,
+      });
+
+      expect(error).not.toBeNull();
+      expect(error?.message).toMatch(/provenance|constraint/i);
+      expect(await getItemsForTurn({ sessionId, turnId })).toHaveLength(0);
+      expect((await getTurn({ id: turnId, sessionId }))?.status).toBe("processing");
+    } finally {
+      await cleanupSessions([sessionId]);
+    }
+  }, 15000);
+
+  it.each([
+    ["missing provenance method", { provenance: { actor: "user" } }],
+    ["empty provenance", { provenance: {} }],
+    ["extra provenance authority field", {
+      provenance: { actor: "user", method: "reported_measurement", established: true },
+    }],
+    ["missing evidence kind", { kind: null }],
+    ["diagnostic trusted fact type", { kind: "trusted_fact", fact_type: "diagnosis",
+      provenance: { actor: "system", method: "trusted_circuit_fact", sourceId: "fixture" } }],
+    ["missing measurement value", { value: null }],
+    ["boolean measurement value", { value: true }],
+    ["untrusted circuit fact", { kind: "trusted_fact", fact_type: "rating",
+      provenance: { actor: "user", method: "reported_claim", sourceId: "circuit-one" } }],
+    ["trusted fact without source ID", { kind: "trusted_fact", fact_type: "rating",
+      provenance: { actor: "system", method: "trusted_circuit_fact" } }],
+    ["trusted fact with whitespace source ID", { kind: "trusted_fact", fact_type: "rating",
+      provenance: { actor: "system", method: "trusted_circuit_fact", sourceId: " \t\n" } }],
+    ["trusted fact with non-breaking-space source ID", { kind: "trusted_fact", fact_type: "rating",
+      provenance: { actor: "system", method: "trusted_circuit_fact", sourceId: "\u00a0" } }],
+    ["trusted fact with ideographic-space source ID", { kind: "trusted_fact", fact_type: "rating",
+      provenance: { actor: "system", method: "trusted_circuit_fact", sourceId: "\u3000" } }],
+    ["trusted fact with BOM-space source ID", { kind: "trusted_fact", fact_type: "rating",
+      provenance: { actor: "system", method: "trusted_circuit_fact", sourceId: "\uFEFF" } }],
+    ["trusted fact with numeric source ID", { kind: "trusted_fact", fact_type: "rating",
+      provenance: { actor: "system", method: "trusted_circuit_fact", sourceId: 7 } }],
+    ["trusted fact with oversized source ID", { kind: "trusted_fact", fact_type: "rating",
+      provenance: { actor: "system", method: "trusted_circuit_fact", sourceId: "x".repeat(201) } }],
+  ])("rejects %s through raw RPC and rolls back the whole turn", async (_name, overrides) => {
+    const sessionId = randomUUID();
+    const turnId = randomUUID();
+    const createdAt = new Date().toISOString();
+    try {
+      await createSession({ id: sessionId, circuitId: "circuit-one", createdAt });
+      await createTestTurn({ id: turnId, sessionId });
+      const valid = {
+        id: randomUUID(), session_id: sessionId, turn_id: turnId, item_index: 0,
+        category: "evidence", kind: "measurement", content: "TP1 measured 5 V",
+        source_text: "TP1 measured 5 V", subject: "TP1", value: 5, unit: "V",
+        test: null, result: null,
+        provenance: { actor: "user", method: "reported_measurement" },
+        supersedes_id: null, created_at: createdAt,
+      };
+      const { error } = await supabase.rpc("finalize_turn", {
+        p_session_id: sessionId, p_turn_id: turnId,
+        p_items: [valid, { ...valid, ...overrides, id: randomUUID(), item_index: 1 }],
+        p_completion_kind: "accepted", p_completion_payload: null,
+      });
+      expect(error, _name).not.toBeNull();
+      expect(error?.message).toMatch(/constraint/i);
+      expect(await getItemsForTurn({ sessionId, turnId })).toHaveLength(0);
+      expect((await getTurn({ id: turnId, sessionId }))?.status).toBe("processing");
+    } finally {
+      await cleanupSessions([sessionId]);
+    }
+  }, 15000);
+
+  it("ignores a raw RPC attempt to grant a model hypothesis established status", async () => {
+    const sessionId = randomUUID();
+    const turnId = randomUUID();
+    const createdAt = new Date().toISOString();
+    try {
+      await createSession({ id: sessionId, circuitId: "circuit-one", createdAt });
+      await createTestTurn({ id: turnId, sessionId });
+      const { error } = await supabase.rpc("finalize_turn", {
+        p_session_id: sessionId, p_turn_id: turnId,
+        p_items: [{
+          id: randomUUID(), session_id: sessionId, turn_id: turnId, item_index: 0,
+          category: "hypothesis", kind: null,
+          content: "The regulator is faulty", source_text: "The regulator is faulty",
+          subject: null, value: null, unit: null, test: null, result: null,
+          provenance: { actor: "model", method: "generated_hypothesis" },
+          verification_status: "established", supersedes_id: null, created_at: createdAt,
+        }],
+        p_completion_kind: "accepted", p_completion_payload: null,
+      });
+      expect(error).toBeNull();
+      const [stored] = await getItemsForTurn({ sessionId, turnId });
+      expect(stored.category).toBe("hypothesis");
+      expect(stored.verificationStatus).toBe("unverified");
+    } finally {
+      await cleanupSessions([sessionId]);
+    }
+  }, 15000);
+
+  it("keeps repeated model diagnoses unverified alongside established measurements", async () => {
+    const sessionId = randomUUID();
+    try {
+      await createSession({ id: sessionId, circuitId: "circuit-one",
+        createdAt: new Date().toISOString() });
+      for (let index = 0; index < 3; index += 1) {
+        const turnId = randomUUID();
+        await createTestTurn({ id: turnId, sessionId });
+        const measurement = buildSessionItem({
+          extractedItem: { category: "evidence", kind: "measurement",
+            subject: "TP1", value: 0, unit: "V", content: "TP1 measured 0 V",
+            sourceText: "I measured 0 V at TP1." },
+          sessionId, turnId, itemIndex: 0,
+        });
+        const hypothesis = buildModelHypothesis({
+          modelOutput: { content: "The regulator is faulty", verificationStatus: "established" },
+          sessionId, turnId, itemIndex: 1,
+        });
+        await finalizeTurn({ id: turnId, sessionId, items: [measurement, hypothesis],
+          completion: acceptedCompletion });
+      }
+      const items = await getItemsForSession(sessionId);
+      const hypotheses = items.filter((item) => item.category === "hypothesis");
+      const measurements = items.filter((item) => item.kind === "measurement");
+      expect(hypotheses).toHaveLength(3);
+      expect(hypotheses.every((item) => item.verificationStatus === "unverified"
+        && item.provenance.actor === "model")).toBe(true);
+      expect(measurements).toHaveLength(3);
+      expect(measurements.every((item) => item.verificationStatus === "established")).toBe(true);
+    } finally {
+      await cleanupSessions([sessionId]);
+    }
+  }, 30000);
+
+  it.each([
+    ["null completion kind", {}, null, /Unsupported completion kind/],
+    ["missing item session ID", { session_id: null }, "accepted", /finalized session/],
+    ["missing item turn ID", { turn_id: null }, "accepted", /finalized turn/],
+  ])("rejects %s at the raw finalization boundary", async (_name, overrides, kind, message) => {
+    const sessionId = randomUUID();
+    const turnId = randomUUID();
+    const createdAt = new Date().toISOString();
+    try {
+      await createSession({ id: sessionId, circuitId: "circuit-one", createdAt });
+      await createTestTurn({ id: turnId, sessionId });
+      const valid = {
+        id: randomUUID(), session_id: sessionId, turn_id: turnId, item_index: 0,
+        category: "hypothesis", kind: null, content: "U1 may be faulty",
+        source_text: "U1 may be faulty", subject: null, value: null, unit: null,
+        test: null, result: null, provenance: { actor: "user", method: "reported_claim" },
+        supersedes_id: null, created_at: createdAt,
+      };
+      const { error } = await supabase.rpc("finalize_turn", {
+        p_session_id: sessionId, p_turn_id: turnId,
+        p_items: [valid, { ...valid, ...overrides, id: randomUUID(), item_index: 1 }],
+        p_completion_kind: kind, p_completion_payload: null,
+      });
+      expect(error).not.toBeNull();
+      expect(error?.message).toMatch(message);
+      expect(await getItemsForTurn({ sessionId, turnId })).toHaveLength(0);
+      expect((await getTurn({ id: turnId, sessionId }))?.status).toBe("processing");
+    } finally {
+      await cleanupSessions([sessionId]);
+    }
+  }, 15000);
+
+  it("keeps the raw clarification write contract aligned with the Node reader", async () => {
+    const sessionId = randomUUID();
+    try {
+      await createSession({ id: sessionId, circuitId: "contract-audit", createdAt: new Date().toISOString() });
+      let turnId = randomUUID();
+      await createTestTurn({ id: turnId, sessionId });
+      for (const payload of clarificationCases) {
+        const expected = turnModels.turnCompletionSchema.safeParse({ kind: "clarification_required", payload }).success;
+        const { error } = await supabase.rpc("finalize_turn", {
+          p_session_id: sessionId, p_turn_id: turnId, p_items: [],
+          p_completion_kind: "clarification_required", p_completion_payload: payload,
+        });
+        expect(error === null, JSON.stringify(payload)).toBe(expected);
+        const turn = await getTurn({ id: turnId, sessionId });
+        expect(turn.status).toBe(expected ? "completed" : "processing");
+        if (expected) {
+          expect(turn.completionPayload).toEqual(payload);
+          turnId = randomUUID();
+          await createTestTurn({ id: turnId, sessionId });
+        }
+      }
+    } finally { await cleanupSessions([sessionId]); }
+  }, 180000);
+
+  it("rejects malformed clarification atomically even with valid items", async () => {
+    const sessionId = randomUUID(); const turnId = randomUUID();
+    const createdAt = new Date().toISOString();
+    try {
+      await createSession({ id: sessionId, circuitId: "contract-audit", createdAt });
+      await createTestTurn({ id: turnId, sessionId });
+      const item = { id: randomUUID(), session_id: sessionId, turn_id: turnId, item_index: 0,
+        category: "hypothesis", kind: null, content: "U1 may be faulty", source_text: "U1 may be faulty",
+        provenance: { actor: "user", method: "reported_claim" }, supersedes_id: null, created_at: createdAt };
+      const { error } = await supabase.rpc("finalize_turn", { p_session_id: sessionId,
+        p_turn_id: turnId, p_items: [item], p_completion_kind: "clarification_required",
+        p_completion_payload: { reason: "semantic_ambiguity", unresolved: [null] } });
+      expect(error).not.toBeNull();
+      expect(await getItemsForTurn({ sessionId, turnId })).toHaveLength(0);
+      expect((await getTurn({ id: turnId, sessionId })).status).toBe("processing");
+    } finally { await cleanupSessions([sessionId]); }
+  }, 15000);
+
+  it("keeps trusted circuit facts scoped to their owning session", async () => {
+    const first = randomUUID(); const second = randomUUID(); const turnId = randomUUID();
+    const createdAt = new Date().toISOString();
+    try {
+      await createSession({ id: first, circuitId: "same-circuit", createdAt });
+      await createSession({ id: second, circuitId: "same-circuit", createdAt });
+      await createTestTurn({ id: turnId, sessionId: first });
+      const fact = buildTrustedCircuitFact({ fact: { factType: "rating", subject: "R3",
+        value: 330, unit: "ohm", content: "R3 is rated 330 ohm", sourceText: "R3 is rated 330 ohm" },
+        trustedSourceId: "same-fixture", sessionId: first, turnId, itemIndex: 0 });
+      await finalizeTurn({ id: turnId, sessionId: first, items: [fact], completion: acceptedCompletion });
+      expect(await getItemsForSession(first)).toHaveLength(1);
+      expect(await getItemsForSession(second)).toHaveLength(0);
+    } finally { await cleanupSessions([first, second]); }
+  }, 15000);
+
 });

@@ -199,7 +199,7 @@ describe("extraction service", () => {
           {
             category: "evidence",
             kind: "measurement",
-            subject: "TP1",
+            subject: "meter",
             value: 5.02,
             unit: "V",
             content: "TP1 measured 5.02 V",
@@ -441,10 +441,10 @@ describe("extraction service", () => {
             {
               category: "evidence",
               kind: "measurement",
-              subject: "TP1",
+              subject: "TP1 voltage relative to ground",
               value: 4.8,
               unit: "V",
-              content: "TP1 measured 4.8 V",
+              content: "TP1 voltage relative to ground measured 4.8 V",
               sourceText: "It reads 4.8 volts.",
             },
           ],
@@ -807,6 +807,47 @@ describe("extraction service", () => {
     expect(result.unresolved).toHaveLength(1);
     expect(result.unresolved[0].reason)
       .toContain("multiple current session items");
+  });
+
+  it("repairs a test result whose structured result is not attested by sourceText", async () => {
+    let repairCalls = 0;
+    const provider = {
+      async extract() {
+        return {
+          items: [{
+            category: "evidence",
+            kind: "test_result",
+            test: "continuity test",
+            result: "short circuit",
+            content: "Continuity test indicated a short circuit",
+            sourceText: "The continuity test did not beep",
+          }],
+          unresolved: [],
+        };
+      },
+      async repair() {
+        repairCalls += 1;
+        return {
+          items: [{
+            category: "evidence",
+            kind: "test_result",
+            test: "continuity test",
+            result: "did not beep",
+            content: "The continuity test did not beep",
+            sourceText: "The continuity test did not beep",
+          }],
+          unresolved: [],
+        };
+      },
+    };
+
+    const result = await extractUserMessage({
+      provider,
+      userMessage: "The continuity test did not beep.",
+    });
+
+    expect(repairCalls).toBe(1);
+    expect(result.items[0].result).toBe("did not beep");
   });
 
 });
