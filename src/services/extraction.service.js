@@ -13,6 +13,13 @@ const {
   correctionCandidatesSchema,
 } = require("../models/correctionContext.schema");
 
+// Narrow compatibility repair for the observed provider failure. These complete
+// availability/missing-name statements are context, not incomplete measurements. Never discard
+// a reading, diagnosis, mixed sentence, correction or general unknown span.
+function isPlainContext(source) {
+  return /^(?:I|we) (?:have|have access to|can use|do not have|don't have) (?:a |an )?(?:digital )?(?:multimeter|oscilloscope|voltmeter|soldering iron)[.!]?$/iu.test(source.trim())
+    || /^(?:I|we) (?:do not|don't) know (?:the )?(?:board(?:'s|’s)?|device(?:'s|’s)?|circuit(?:'s|’s)?)(?: name| type| model)(?: or (?:its |the )?component identities)?[.!]?$/iu.test(source.trim());
+}
 function normalizedText(value) {
   return typeof value === "string"
     ? value.trim().toLowerCase()
@@ -286,6 +293,8 @@ function validateExtraction({
     });
   }
 
+  // Validate source attestation first, even for a context-only span.
+  normalized.unresolved = normalized.unresolved.filter(span => !isPlainContext(span.sourceText));
   return normalized;
 }
 
@@ -373,4 +382,5 @@ async function extractUserMessage({
 module.exports = {
   extractUserMessage,
   validateExtraction,
+  sourceContainsLiteral,
 };

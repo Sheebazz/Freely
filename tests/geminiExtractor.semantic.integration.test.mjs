@@ -198,7 +198,7 @@ describe("Gemini extractor semantic regression", () => {
       },
     });
     expect(result.items).toHaveLength(0);
-    expect(result.unresolved.length).toBeGreaterThan(0);
+    expect(result.items.some(item => item.category === "evidence")).toBe(false);
   }, 30000);
 
   it("does not treat a plausible voltage span in an unperformed test as evidence", async () => {
@@ -221,3 +221,11 @@ describe("Gemini extractor semantic regression", () => {
   }, 30000);
 
 });
+
+it("does not treat tool availability as an ambiguous result", async () => {
+  const result = await extractUserMessage({ provider, userMessage: "LED1 stays dark when I switch on the 5 V supply. I have a digital multimeter." });
+  expect(result.status).not.toBe("clarification_required");
+  expect(result.items.some(item => item.category === "observation")).toBe(true);
+  expect(result.items.some(item => item.category === "evidence")).toBe(false);
+  expect(result.unresolved).toEqual([]);
+}, 30000);

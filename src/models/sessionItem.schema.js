@@ -1,4 +1,5 @@
 const { z } = require("zod");
+const { measurementContextSchema } = require("./reasoning.schema");
 
 const verificationStatusSchema = z.enum(["established", "unverified"]);
 
@@ -49,6 +50,7 @@ const measurementEvidenceSchema = backendFieldsSchema.extend({
   category: z.literal("evidence"),
   kind: z.literal("measurement"),
   verificationStatus: z.literal("established"),
+  measurementContext: measurementContextSchema.optional(),
   subject: z.string().min(1),
   value: z.union([
     z.number(),

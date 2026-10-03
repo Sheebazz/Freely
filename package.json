@@ -5,8 +5,13 @@
   "private": true,
   "scripts": {
     "test": "vitest run --exclude '**/*.integration.test.mjs'",
-    "test:integration": "vitest run tests/supabaseSession.repository.integration.test.mjs tests/turnProcessing.integration.test.mjs",
-    "test:semantic": "vitest run tests/geminiExtractor.semantic.integration.test.mjs"
+    "test:integration": "vitest run tests/supabaseSession.repository.integration.test.mjs tests/turnProcessing.integration.test.mjs tests/reasoningLoop.integration.test.mjs",
+    "test:semantic": "vitest run tests/geminiExtractor.semantic.integration.test.mjs",
+    "troubleshoot": "node scripts/troubleshoot.mjs",
+    "test:reasoning": "vitest run tests/geminiReasoner.semantic.integration.test.mjs",
+    "test:chat": "vitest run tests/chat.semantic.integration.test.mjs",
+    "start": "node scripts/serve.mjs",
+    "walkthrough": "node scripts/walk-circuit-one.mjs"
   },
   "repository": {
     "type": "git",

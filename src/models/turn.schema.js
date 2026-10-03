@@ -1,4 +1,5 @@
 const { z } = require("zod");
+const { reasoningResultSchema } = require("./reasoning.schema");
 const {
   unresolvedExtractionSchema,
 } = require("./extraction.schema");
@@ -26,6 +27,9 @@ const turnBaseFields = {
   createdAt: z.iso.datetime({ offset: true }),
   updatedAt: z.iso.datetime({ offset: true }),
   requestHash: turnRequestHashSchema.nullable(),
+  reasoningResult: reasoningResultSchema.nullable().optional(),
+  replyToTurnId: z.uuid().nullable().optional(),
+  finalizedRevision: z.number().int().positive().nullable().optional(),
 };
 
 const processingTurnSchema = z.object({

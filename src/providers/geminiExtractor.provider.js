@@ -24,7 +24,34 @@ You extract troubleshooting information from a user's electronics message.
 
 Return only structured data matching the provided schema.
 
-Classify each supported statement as exactly one of:
+Use surrounding context to understand harmless spelling or dictation errors in
+ordinary language. Preserve the user's original wording in sourceText; do not
+silently correct measurements, units, polarity, part numbers, pin numbers or
+component identity. "The lead light stays dark" may describe an LED light when
+that meaning is clear; "the lead is broken" may mean a wire. Ask one short question
+when more than one interpretation would change the next check. Never promote a
+likely transcription correction into verified component identity or a reading.
+
+
+Only extract observations, reported results and diagnostic claims. The complete
+original message is separately retained as reasoning context.
+
+Plain context is NOT an ambiguity. Available tools, device purpose, power-source
+labels, known limitations, missing documents, and direct questions can be left out
+of both arrays when none of the four categories applies. Do not demand that a
+person report a measurement merely because they named an instrument.
+- "I have a digital multimeter." -> context; no unresolved entry.
+- "I have not taken any readings." -> context; no unresolved entry.
+- "This is a battery-powered desk lamp." -> context; do not invent a reading.
+- "I do not know the board's name." -> missing knowledge; no unresolved entry.
+- "What should I check next?" -> question; no unresolved entry.
+- "I cannot safely access more test points." -> access context; no unresolved entry.
+- "TP1 should be 5 V." -> expected-value context; never an actual reading.
+Only use unresolved for a genuinely ambiguous claimed observation/result/diagnosis
+or a correction that cannot safely be matched. Lack of a measurement is not an
+ambiguous measurement. Uncertain reported readings must still stay unresolved.
+
+Classify each supported diagnostic statement as exactly one of:
 
 1. observation
    Something the user reports observing directly.
@@ -56,7 +83,7 @@ Examples:
 - "It looks like a 555." -> hypothesis: appearance does not establish identity.
 - "It looks like a 555, so I think that is U1." -> only hypothesis items.
   Do not label the guessed identity as a direct observation or evidence.
-- "TP1 should be 5 V." -> unresolved: expected voltage is not a reported reading.
+- "TP1 should be 5 V." -> context only: expected voltage is not a reported reading.
 
 An observation is something the user directly notices through sight,
 sound, smell, touch where safe, or another direct non-test observation.
@@ -86,10 +113,8 @@ Examples:
 - "The diode test gives 0.62 V." -> evidence / test_result
   because the user explicitly reports the result of a named test.
 
-If a span cannot be classified safely as observation, measurement,
-test result, or hypothesis, do not guess.
-
-Return that span in unresolved instead.
+If a claimed result or diagnosis cannot be classified safely, do not guess.
+Return that span in unresolved. Plain context and questions stay out of both arrays.
 
 Use unresolved when the user's wording does not establish what kind of
 information they are reporting.
@@ -247,6 +272,7 @@ class GeminiExtractorProvider extends ExtractorProvider {
   }) {
     const interaction = await ai.interactions.create({
       model: GEMINI_MODEL,
+      store: false,
       input: `${EXTRACTION_INSTRUCTIONS}
 
 TURN CONTEXT:
@@ -262,8 +288,11 @@ ${userMessage}`,
         mime_type: "application/json",
         schema: extractionGeminiSchema,
       },
-    });
+    }, { timeout: 15000, maxRetries: 0 });
 
+    if (interaction.status && interaction.status !== "completed") {
+      throw new Error(`Gemini extraction did not complete: ${interaction.status}`);
+    }
     if (!interaction.output_text) {
       throw new Error("Gemini returned no extraction output");
     }
@@ -284,6 +313,7 @@ ${userMessage}`,
   }) {
     const interaction = await ai.interactions.create({
       model: GEMINI_MODEL,
+      store: false,
       input: `${EXTRACTION_INSTRUCTIONS}
 
 The previous extraction was rejected by the backend.
@@ -317,8 +347,11 @@ ${JSON.stringify(rejectedOutput)}`,
         mime_type: "application/json",
         schema: extractionGeminiSchema,
       },
-    });
+    }, { timeout: 15000, maxRetries: 0 });
 
+    if (interaction.status && interaction.status !== "completed") {
+      throw new Error(`Gemini extraction did not complete: ${interaction.status}`);
+    }
     if (!interaction.output_text) {
       throw new Error("Gemini returned no repaired extraction");
     }

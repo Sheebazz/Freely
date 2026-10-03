@@ -1,8 +1,20 @@
 import { describe, it, expect, vi } from "vitest";
 import turnProcessingModule from "../src/services/turnProcessing.service.js";
 import sessionService from "../src/services/session.service.js";
+import circuitService from "../src/services/circuitContext.service.js";
 
-const { fingerprintTurnRequest, processUserTurn } = turnProcessingModule;
+const { fingerprintTurnRequest } = turnProcessingModule;
+// Existing lifecycle regressions run through the full reasoning entry point.
+// This empty catalogue isolates those tests from circuit-specific behaviour.
+const circuit = circuitService.prepareCircuitContext("circuit-one", { description: {} });
+function processUserTurn(args) {
+  return turnProcessingModule.processUserTurn({
+    ...args, circuitLoader: () => circuit,
+    reasoningProvider: { reason: async () => ({ kind: "context_required",
+      message: "What circuit are you testing?", why: "The test context is missing.",
+      testId: null, supportingItemIds: [], hypotheses: [] }) },
+  });
+}
 const { buildSessionItem } = sessionService;
 
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
@@ -37,6 +49,9 @@ function repository(overrides = {}) {
     getTurn: vi.fn(),
     markTurnFailed: vi.fn(),
     retryFailedTurn: vi.fn(),
+    getSession: vi.fn().mockResolvedValue({ id: SESSION_ID, circuitId: "circuit-one",
+      stateRevision: 0, circuitContextHash: null }),
+    getReasoningHistory: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }

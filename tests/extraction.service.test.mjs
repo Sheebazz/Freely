@@ -851,3 +851,28 @@ describe("extraction service", () => {
   });
 
 });
+
+it("treats an exact tool-availability span as context while retaining an ambiguous reading", async () => {
+  const provider = { extract: async () => ({ items: [], unresolved: [
+    { sourceText: "I have a digital multimeter.", reason: "No result" },
+    { sourceText: "Maybe around 5.", reason: "Reading or estimate is unclear" },
+  ] }) };
+  const result = await extractUserMessage({ provider, userMessage: "I have a digital multimeter. Maybe around 5." });
+  expect(result.unresolved).toEqual([{ sourceText: "Maybe around 5.", reason: "Reading or estimate is unclear" }]);
+  expect(result.items).toEqual([]);
+});
+it("does not discard mixed tool statements, corrections, readings or fabricated source spans", async () => {
+  for (const sourceText of ["I have a digital multimeter reading 5 V.", "Actually I have a digital multimeter."]) {
+    const provider = { extract: async () => ({ items: [], unresolved: [{ sourceText, reason: "Need details" }] }) };
+    expect((await extractUserMessage({ provider, userMessage: sourceText })).unresolved).toHaveLength(1);
+  }
+  const provider = { extract: async () => ({ items: [], unresolved: [{ sourceText: "I have a digital multimeter.", reason: "No result" }] }) };
+  await expect(extractUserMessage({ provider, userMessage: "LED dark." })).rejects.toThrow();
+});
+
+it("keeps a straightforward missing board-name statement as context without inventing evidence", async () => {
+  const userMessage = "I do not know the board’s name or its component identities.";
+  const provider = { extract: async () => ({ items: [], unresolved: [{ sourceText: userMessage, reason: "No result was reported" }] }) };
+  const result = await extractUserMessage({ provider, userMessage });
+  expect(result.items).toEqual([]); expect(result.unresolved).toEqual([]);
+});

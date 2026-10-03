@@ -66,6 +66,7 @@ function buildSessionItem({
   itemIndex,
   resolvedSupersedesId = null,
   createdAt = new Date().toISOString(),
+  measurementContext = undefined,
 }) {
   const parsedExtractedItem = extractedItemSchema.parse(extractedItem);
   const hasCorrectionRef =
@@ -92,6 +93,7 @@ function buildSessionItem({
     supersedesId: resolvedSupersedesId,
     provenance: provenanceFor(parsedExtractedItem),
     verificationStatus: verificationStatusFor(parsedExtractedItem),
+    ...(measurementContext !== undefined ? { measurementContext } : {}),
   };
 
   return sessionItemSchema.parse(storedItem);

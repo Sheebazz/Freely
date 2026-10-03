@@ -1,5 +1,6 @@
 const { supabase } = require("../config/supabase");
 const { sessionItemSchema } = require("../models/sessionItem.schema");
+const { enforcedReasoningResultSchema } = require("../models/reasoning.schema");
 const {
   turnCompletionSchema,
   turnRequestHashSchema,
@@ -25,6 +26,7 @@ function toDatabaseItem(item) {
     test: parsed.test ?? null,
     result: parsed.result ?? null,
     provenance: parsed.provenance,
+    measurement_context: parsed.measurementContext ?? null,
     supersedes_id: parsed.supersedesId ?? null,
     created_at: parsed.createdAt,
   };
@@ -52,6 +54,7 @@ function fromDatabaseItem(row) {
     ...(row.result !== null ? { result: row.result } : {}),
     provenance: row.provenance,
     verificationStatus: row.verification_status,
+    ...(row.measurement_context != null ? { measurementContext: row.measurement_context } : {}),
     supersedesId: row.supersedes_id,
     createdAt: row.created_at,
   });
@@ -65,16 +68,21 @@ function fromDatabaseTurn(row) {
     completionKind: row.completion_kind,
     completionPayload: row.completion_payload,
     requestHash: row.request_hash,
+    reasoningResult: row.reasoning_result ?? null,
+    replyToTurnId: row.reply_to_turn_id ?? null,
+    finalizedRevision: row.finalized_revision ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
 }
 
-async function createSession({ id, circuitId, createdAt }) {
+async function createSession({ id, circuitId, createdAt, accessTokenHash = null, boardDescription = null }) {
   const row = {
     id,
     circuit_id: circuitId,
     created_at: createdAt,
+    ...(accessTokenHash !== null ? { access_token_hash: accessTokenHash } : {}),
+    ...(boardDescription !== null ? { board_description: boardDescription } : {}),
   };
 
   const { data, error } = await supabase
@@ -84,12 +92,17 @@ async function createSession({ id, circuitId, createdAt }) {
     .single();
 
   if (error) {
-    throw new Error(`Failed to create session: ${error.message}`);
+    const failure = new Error("Failed to create session");
+    failure.code = error.code;
+    throw failure;
   }
 
   return {
     id: data.id,
     circuitId: data.circuit_id,
+    boardDescription: data.board_description ?? null,
+    stateRevision: data.state_revision,
+    circuitContextHash: data.circuit_context_hash,
     createdAt: data.created_at,
   };
 }
@@ -112,8 +125,19 @@ async function getSession(sessionId) {
   return {
     id: data.id,
     circuitId: data.circuit_id,
+    boardDescription: data.board_description ?? null,
+    stateRevision: data.state_revision,
+    circuitContextHash: data.circuit_context_hash,
     createdAt: data.created_at,
   };
+}
+
+// Server-only authorization: never include this hash in API responses/model context.
+async function getSessionAccessHash(sessionId) {
+  const { data, error } = await supabase.from("sessions").select("access_token_hash")
+    .eq("id", sessionId).maybeSingle();
+  if (error) throw new Error("Session authorization lookup failed");
+  return data?.access_token_hash ?? null;
 }
 
 async function getItemsForSession(sessionId) {
@@ -184,6 +208,7 @@ async function finalizeTurn({
   sessionId,
   items,
   completion,
+  reasoning = null,
 }) {
   const parsedItems = items.map((item) => sessionItemSchema.parse(item));
   const parsedCompletion = turnCompletionSchema.parse(completion);
@@ -198,14 +223,24 @@ async function finalizeTurn({
     }
   }
 
+  const args = {
+    p_session_id: sessionId,
+    p_turn_id: id,
+    p_items: parsedItems.map(toDatabaseItem),
+    p_completion_kind: parsedCompletion.kind,
+    p_completion_payload: parsedCompletion.payload,
+  };
+  if (reasoning !== null) {
+    args.p_reasoning_result = enforcedReasoningResultSchema.parse(reasoning.result);
+    if (parsedCompletion.kind === "clarification_required" && args.p_reasoning_result.kind !== "context_required") {
+      throw new Error("Unresolved report requires context before guidance");
+    }
+    args.p_expected_revision = reasoning.expectedRevision;
+    args.p_reply_to_turn_id = reasoning.replyToTurnId;
+    args.p_circuit_hash = reasoning.circuitHash;
+  }
   const { data, error } = await supabase
-    .rpc("finalize_turn", {
-      p_session_id: sessionId,
-      p_turn_id: id,
-      p_items: parsedItems.map(toDatabaseItem),
-      p_completion_kind: parsedCompletion.kind,
-      p_completion_payload: parsedCompletion.payload,
-    })
+    .rpc(reasoning === null ? "finalize_turn" : "finalize_reasoning_turn", args)
     .single();
 
   if (error) {
@@ -213,6 +248,15 @@ async function finalizeTurn({
   }
 
   return fromDatabaseTurn(data);
+}
+
+async function getReasoningHistory(sessionId) {
+  const { data, error } = await supabase.from("turns")
+    .select("*").eq("session_id", sessionId).eq("status", "completed")
+    .not("reasoning_result", "is", null)
+    .order("finalized_revision", { ascending: true });
+  if (error) throw new Error(`Failed to read reasoning history: ${error.message}`);
+  return data.map(fromDatabaseTurn);
 }
 
 async function runTurnTransition({
@@ -253,13 +297,28 @@ async function retryFailedTurn({ id, sessionId }) {
   });
 }
 
+async function saveChatInput({ sessionId, turnId, requestHash, userMessage, images }) {
+  const { error } = await supabase.rpc("save_chat_input", { p_session_id: sessionId,
+    p_turn_id: turnId, p_request_hash: requestHash, p_message: userMessage, p_images: images });
+  if (error) throw Object.assign(new Error("Failed to save chat input"), { code: error.code });
+}
+async function getChatInputs(sessionId) {
+  const { data, error } = await supabase.from("chat_inputs").select("*").eq("session_id", sessionId)
+    .order("created_at", { ascending: true });
+  if (error) throw Object.assign(new Error("Failed to read chat inputs"), { code: error.code });
+  return data.map(row => ({ turnId: row.turn_id, sessionId: row.session_id,
+    userMessage: row.message, images: row.images, createdAt: row.created_at }));
+}
 module.exports = {
+  saveChatInput, getChatInputs,
   createSession,
+  getSessionAccessHash,
   createTurn,
   finalizeTurn,
   getItemsForSession,
   getItemsForTurn,
   getSession,
+  getReasoningHistory,
   getTurn,
   markTurnFailed,
   retryFailedTurn,

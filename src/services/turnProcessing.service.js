@@ -1,11 +1,17 @@
+const { imagesSchema, imageHash } = require("../models/chatInput.schema");
 const { createHash } = require("crypto");
+const { z } = require("zod");
 const { turnContextSchema } = require("../models/turnContext.schema");
-const { extractUserMessage } = require("./extraction.service");
+const { extractUserMessage, sourceContainsLiteral } = require("./extraction.service");
+const { loadCircuitContext, prepareUserBoardContext } = require("./circuitContext.service");
+const { reasonAboutTurn, assertContextBudget } = require("./reasoning.service");
 const {
   buildCorrectionContext,
   buildSessionItem,
   resolveCorrectionRef,
   validateCorrection,
+  currentItems,
+  buildTrustedCircuitFact,
 } = require("./session.service");
 
 const REQUIRED_REPOSITORY_METHODS = [
@@ -16,6 +22,8 @@ const REQUIRED_REPOSITORY_METHODS = [
   "getTurn",
   "markTurnFailed",
   "retryFailedTurn",
+  "getSession",
+  "getReasoningHistory",
 ];
 
 function assertRepository(repository) {
@@ -43,15 +51,19 @@ function normalizedTurnContext(turnContext) {
   };
 }
 
-function fingerprintTurnRequest({ userMessage, turnContext = null }) {
+function fingerprintTurnRequest({ userMessage, turnContext = null, replyToTurnId = null, images = [] }) {
   if (typeof userMessage !== "string" || userMessage.trim().length === 0) {
     throw new Error("userMessage must be a non-empty string");
   }
 
-  const payload = JSON.stringify({
+  const request = {
     userMessage,
     turnContext: normalizedTurnContext(turnContext),
-  });
+  };
+  // Preserve historical hashes for non-contextual THL-001/002 replay.
+  if (replyToTurnId !== null) request.replyToTurnId = z.uuid().parse(replyToTurnId);
+  if (images.length) request.images = imagesSchema.parse(images).map(image => ({ mimeType: image.mimeType, hash: imageHash(image) }));
+  const payload = JSON.stringify(request);
 
   return createHash("sha256").update(payload).digest("hex");
 }
@@ -80,6 +92,7 @@ async function replayCompletedTurn({ repository, turn, sessionId, turnId }) {
       kind: turn.completionKind,
       payload: turn.completionPayload,
     },
+    reasoning: turn.reasoningResult ?? null,
   };
 }
 
@@ -172,17 +185,35 @@ async function recoverAfterProcessingError({
 async function processUserTurn({
   repository,
   provider,
+  reasoningProvider,
   sessionId,
   turnId,
   userMessage,
   turnContext = null,
+  replyToTurnId = null,
+  images = [],
+  circuitLoader = loadCircuitContext,
 }) {
   assertRepository(repository);
-
-  const parsedTurnContext = normalizedTurnContext(turnContext);
+  images = imagesSchema.parse(images);
+  z.uuid().parse(sessionId);
+  z.uuid().parse(turnId);
+  if (replyToTurnId !== null) z.uuid().parse(replyToTurnId);
+  if (turnContext !== null) {
+    // Historical contextual turns remain replayable. Caller-supplied context
+    // is never accepted for a new reasoning turn.
+    const historicalHash = fingerprintTurnRequest({ userMessage, turnContext });
+    const historical = await repository.getTurn({ id: turnId, sessionId });
+    if (replyToTurnId === null && historical?.status === "completed"
+        && historical.reasoningResult == null) {
+      assertTurnMatchesRequest({ turn: historical, requestHash: historicalHash });
+      return replayCompletedTurn({ repository, turn: historical, sessionId, turnId });
+    }
+    throw new Error("Turn context must be resolved from a persisted recommendation, not supplied by the caller");
+  }
   const requestHash = fingerprintTurnRequest({
     userMessage,
-    turnContext: parsedTurnContext,
+    replyToTurnId, images,
   });
 
   const { turn, ownsProcessing } = await acquireTurn({
@@ -212,10 +243,58 @@ async function processUserTurn({
     throw new Error(`Unsupported acquired turn status: ${turn.status}`);
   }
 
+  let stage = "session";
   try {
+    if (!reasoningProvider || typeof reasoningProvider.reason !== "function") {
+      throw new Error("A reasoning provider is required for a new troubleshooting turn");
+    }
+    const session = await repository.getSession(sessionId);
+    if (!session || session.id !== sessionId) throw new Error("Session does not exist");
+    z.number().int().nonnegative().parse(session.stateRevision);
+    const circuit = session.circuitId === "user-board"
+      ? prepareUserBoardContext(session.boardDescription)
+      : await circuitLoader(session.circuitId);
+    if (circuit.context.id !== session.circuitId) throw new Error("Circuit context belongs to another circuit");
+    if (session.circuitContextHash !== null && session.circuitContextHash !== circuit.hash) {
+      throw new Error("Circuit context changed; start a new session with the reviewed fixture");
+    }
+    if (repository.saveChatInput) await repository.saveChatInput({ sessionId, turnId, requestHash, userMessage, images });
+    const chatInputs = repository.getChatInputs ? await repository.getChatInputs(sessionId) : [];
+    if (chatInputs.some(input => input.sessionId !== sessionId)) throw new Error("Chat history belongs to another session");
+    const previousTurns = await repository.getReasoningHistory(sessionId);
+    if (previousTurns.some((previous) => previous.sessionId !== sessionId)) {
+      throw new Error("Reasoning history contains another session's turn");
+    }
+    const completedInputIds = new Set(previousTurns.map(previous => previous.id));
+    const acceptedInputs = chatInputs.filter(input => completedInputIds.has(input.turnId) || input.turnId === turnId);
+    const imageInputs = acceptedInputs.flatMap(input => input.images.map(image => ({ ...image, turnId: input.turnId })));
+    const reasoningImages = imageInputs.length ? imageInputs : images.map(image => ({ ...image, turnId }));
+    if (reasoningImages.length > 3) throw new Error("This conversation has reached its three-image limit; start a new chat");
+    const latestRecommendation = previousTurns.filter((previous) =>
+      previous.reasoningResult?.recommendation != null).at(-1);
+    let parsedTurnContext = null;
+    if (replyToTurnId !== null) {
+      const requestedTurn = await repository.getTurn({ id: replyToTurnId, sessionId });
+      if (!requestedTurn || requestedTurn.status !== "completed"
+          || requestedTurn.id !== latestRecommendation?.id
+          || !requestedTurn.reasoningResult?.recommendation) {
+        throw new Error("Reply target is not the current recommendation in this session");
+      }
+      const recommendation = requestedTurn.reasoningResult.recommendation;
+      parsedTurnContext = turnContextSchema.parse({
+        expectedResponseType: recommendation.expectedResponseType,
+        requestedSubject: recommendation.requestedSubject,
+      });
+    }
     const history = await repository.getItemsForSession(sessionId);
+    if (history.some((item) => item.sessionId !== sessionId)) {
+      throw new Error("Session history contains another session's items");
+    }
     const { candidates, targets } = buildCorrectionContext(history);
+    assertContextBudget({ userMessage, circuit: circuit.context,
+      items: currentItems(history), previousTurns });
 
+    stage = "extraction";
     const extraction = await extractUserMessage({
       provider,
       userMessage,
@@ -223,36 +302,10 @@ async function processUserTurn({
       correctionCandidates: candidates,
     });
 
-    if (extraction.status === "clarification_required") {
-      const completedTurn = await repository.finalizeTurn({
-        id: turnId,
-        sessionId,
-        items: [],
-        completion: {
-          kind: "clarification_required",
-          payload: {
-            reason: "extraction_unrecoverable",
-            detail: extraction.detail,
-          },
-        },
-      });
-
-      return {
-        status: "completed",
-        replayed: false,
-        turn: completedTurn,
-        items: [],
-        completion: {
-          kind: completedTurn.completionKind,
-          payload: completedTurn.completionPayload,
-        },
-      };
-    }
-
     const storedItems = [];
     const correctionValidationItems = [...history];
 
-    for (const [itemIndex, extractedItem] of extraction.items.entries()) {
+    for (const [itemIndex, extractedItem] of (extraction.items ?? []).entries()) {
       const resolvedSupersedesId = resolveCorrectionRef({
         correctionRef: extractedItem.correctionRef,
         targets,
@@ -264,6 +317,11 @@ async function processUserTurn({
         turnId,
         itemIndex,
         resolvedSupersedesId,
+        ...(extractedItem.kind === "measurement" ? {
+          measurementContext: sourceContainsLiteral(extractedItem.sourceText, extractedItem.subject)
+            ? { subjectOrigin: "user_span", recommendationTurnId: null }
+            : { subjectOrigin: "recommended_test", recommendationTurnId: replyToTurnId },
+        } : {}),
       });
 
       validateCorrection({
@@ -275,7 +333,11 @@ async function processUserTurn({
       correctionValidationItems.push(storedItem);
     }
 
-    const completion = extraction.unresolved.length > 0
+    const completion = extraction.status === "clarification_required"
+      ? { kind: "clarification_required", payload: {
+          reason: "extraction_unrecoverable", detail: extraction.detail,
+        } }
+      : extraction.unresolved.length > 0
       ? {
           kind: "clarification_required",
           payload: {
@@ -288,11 +350,77 @@ async function processUserTurn({
           payload: null,
         };
 
+    // The fixture source is explicitly trusted for this session. Never derive
+    // trusted facts from the model or from fault-case/evaluation answers.
+    const existingFacts = new Set(history.filter((item) => item.kind === "trusted_fact"
+      && item.provenance.sourceId === circuit.sourceId).map((item) => item.subject));
+    for (const fact of circuit.facts) {
+      if (existingFacts.has(fact.subject)) continue;
+      storedItems.push(buildTrustedCircuitFact({ fact, trustedSourceId: circuit.sourceId,
+        sessionId, turnId, itemIndex: storedItems.length }));
+    }
+    let reasoning;
+    if (extraction.status === "clarification_required") {
+      reasoning = {
+        kind: "context_required",
+        message: "Could you describe what happened? If you took a measurement, tell me where you measured and what the meter displayed.",
+        why: "I could not reliably interpret the report, so choosing a test would require guessing.",
+        recommendation: null, supportingItemIds: [],
+      };
+    } else if (extraction.unresolved.length > 0) {
+      // Extraction has already identified a missing distinction. Ask about it
+      // directly rather than spending a reasoning call that can bypass it.
+      // Keep all ambiguities in completion metadata; ask one at a time.
+      const unresolved = extraction.unresolved[0];
+      const source = unresolved.sourceText.replace(/\s+/gu, " ").trim();
+      const reason = unresolved.reason.replace(/\s+/gu, " ").trim();
+      reasoning = {
+        kind: "context_required",
+        message: /correct|revis|retract|replac|earlier|previous/iu.test(reason)
+          ? "Which earlier observation or result are you correcting, and what should it say?"
+          : /reading|measur|value|volt|unit|estimate|number/iu.test(reason) || /\d/u.test(source)
+          ? parsedTurnContext?.expectedResponseType === "measurement"
+            ? "Was that a meter reading or an estimate? If you measured it, what number and unit did the meter show?"
+            : "Was that a measurement or an estimate? If measured, where did you measure it, and what number and unit did the meter show?"
+          : `What do you mean by “${source}”?`,
+        why: "That detail will help me interpret what you reported.",
+        recommendation: null, supportingItemIds: [],
+      };
+    } else {
+      const context = {
+        userMessage,
+        circuit: circuit.context,
+        items: currentItems([...history, ...storedItems]),
+        unresolved: extraction.unresolved,
+        replyToTurnId,
+        requestedContext: parsedTurnContext,
+        previousOutcomes: previousTurns.map((previous) => ({
+          turnId: previous.id, result: previous.reasoningResult,
+        })),
+      };
+      // Only completed earlier requests and the current request are model context.
+      context.previousMessages = acceptedInputs.filter(input => input.turnId !== turnId)
+        .map(input => ({ turnId: input.turnId, message: input.userMessage }));
+      context.images = reasoningImages;
+      stage = "reasoning";
+      const response = await reasonAboutTurn({ provider: reasoningProvider, context,
+        circuit, sessionId, turnId, itemIndex: storedItems.length });
+      reasoning = response.result;
+      storedItems.push(...response.hypotheses);
+    }
+
+    stage = "persistence";
     const completedTurn = await repository.finalizeTurn({
       id: turnId,
       sessionId,
       items: storedItems,
       completion,
+      reasoning: {
+        result: reasoning,
+        expectedRevision: session.stateRevision,
+        replyToTurnId,
+        circuitHash: circuit.hash,
+      },
     });
 
     return {
@@ -304,8 +432,10 @@ async function processUserTurn({
         kind: completedTurn.completionKind,
         payload: completedTurn.completionPayload,
       },
+      reasoning: completedTurn.reasoningResult,
     };
   } catch (error) {
+    if (error && typeof error === "object") error.processingStage = stage;
     return recoverAfterProcessingError({
       repository,
       sessionId,

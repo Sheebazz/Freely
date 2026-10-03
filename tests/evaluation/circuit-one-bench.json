@@ -1,0 +1,21 @@
+{
+  "notice": "Simulated bench reports for evaluation, not physical measurements. No scoring answer is supplied to the reasoner.",
+  "common": {
+    "measure_supply_voltage": "The meter displays 5.0 V between TP_SUPPLY and GND.",
+    "measure_reset_voltage": "The meter displays 5.0 V between TP_RESET and GND.",
+    "observe_output_voltage": "During five seconds the meter display at TP_OUTPUT relative to GND changes repeatedly between 0.2 V and 4.0 V.",
+    "observe_timing_voltage": "During five seconds the meter display at TP_TIMING relative to GND changes repeatedly between 1.7 V and 3.3 V.",
+    "inspect_led_polarity": "With power removed, LED1's anode indicator faces R3 and its cathode indicator faces GND.",
+    "measure_r3": "With power removed and one lead lifted, the meter displays 330 Ohm across R3.",
+    "measure_r1": "With power removed and one lead lifted, the meter displays 10 kOhm across R1.",
+    "check_c1_for_short": "After removing power, discharging C1 and lifting one lead, its resistance display rises above 10 Ohm during the ten-second observation."
+  },
+  "cases": {
+    "case-01": {"measure_supply_voltage": "The meter displays 0.0 V between TP_SUPPLY and GND. I cannot safely access the supply wiring or obtain any further readings or documents now."},
+    "case-02": {"measure_reset_voltage": "The meter displays 0.0 V between TP_RESET and GND. I cannot obtain further readings, inspect the reset wiring, or identify U1 now."},
+    "case-03": {"measure_r3": "After removing power and lifting one lead of R3, the meter displays OL across R3 on the resistance range. The meter manual identifies OL as beyond range. I cannot inspect the wiring or obtain further measurements now."},
+    "case-04": {"observe_output_voltage": "At TP_OUTPUT relative to GND the meter displays a steady 4.0 V during the five-second observation.", "observe_timing_voltage": "At TP_TIMING relative to GND the meter displays a steady 0.0 V during the five-second observation.", "measure_r1": "After removing power and lifting one lead of R1, the meter displays OL across R1 on the resistance range. I cannot obtain further readings, documents, or safe access now."},
+    "case-05": {"inspect_led_polarity": "With power removed, LED1's cathode indicator faces R3 and its anode indicator faces GND. U1's marking is still unreadable; I cannot obtain further readings or documents now."},
+    "case-06": {"observe_output_voltage": "At TP_OUTPUT relative to GND the meter displays a steady 4.0 V during the five-second observation.", "observe_timing_voltage": "At TP_TIMING relative to GND the meter displays a steady 0.0 V during the five-second observation.", "check_c1_for_short": "After removing power, discharging C1 and lifting one lead, the meter displays 1 Ohm across C1 for the entire ten-second observation. I cannot obtain further readings, documents, or safe access now."}
+  }
+}

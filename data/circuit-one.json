@@ -97,7 +97,7 @@
       "tool": "digital multimeter",
       "mode": "DC voltage",
       "power_state": "powered",
-      "procedure": "Measure TP_SUPPLY relative to GND.",
+      "procedure": "Use only this 5 V demo board. If you cannot locate TP_SUPPLY and GND, stop and ask for help identifying them. Before connecting the probes, put the black lead in COM and the red lead in the voltage (V) socket, not a current socket. Select DC voltage (V with a straight/dashed line); use auto-range or a manual range above 5.5 V, such as 20 V. With the board powered from its specified 5 V DC supply, touch the black probe to GND and the red probe to TP_SUPPLY. Keep the tips from bridging adjacent contacts. Report the displayed voltage, including its sign and unit.",
       "possible_results": [
         {
           "result": "0 V to 0.5 V",
@@ -115,18 +115,20 @@
           "result": "above 5.5 V",
           "implication": "The board supply is above the recorded operating range. The supply condition must be resolved before downstream behaviour is interpreted as normal."
         }
-      ]
+      ],
+      "expectedResponseType": "measurement",
+      "requestedSubject": "TP_SUPPLY relative to GND"
     },
     {
       "id": "measure_reset_voltage",
       "tool": "digital multimeter",
       "mode": "DC voltage",
       "power_state": "powered",
-      "procedure": "Measure TP_RESET relative to GND.",
+      "procedure": "Use only this 5 V demo board. If you cannot locate TP_RESET and GND, stop and ask for help identifying them. Before connecting the probes, put the black lead in COM and the red lead in the voltage (V) socket, not a current socket. Select DC voltage (V with a straight/dashed line); use auto-range or a manual range above 5.5 V, such as 20 V. With the board powered from its specified 5 V DC supply, touch the black probe to GND and the red probe to TP_RESET. Keep the tips from bridging adjacent contacts. Report the displayed voltage, including its sign and unit.",
       "possible_results": [
         {
           "result": "0 V to 0.5 V",
-          "implication": "A low-reset condition is present at TP_RESET. While TP_RESET remains in this range, U1 cannot produce the intended oscillating output."
+          "implication": "TP_RESET is near GND rather than the intended supply level. A reset-path fault is a hypothesis; exact reset assertion depends on the actual device threshold."
         },
         {
           "result": "above 0.5 V and below 4.5 V",
@@ -140,14 +142,16 @@
           "result": "above 5.5 V",
           "implication": "TP_RESET is above the circuit's recorded operating supply range. The supply and measurement conditions must be checked before the reset state is interpreted."
         }
-      ]
+      ],
+      "expectedResponseType": "measurement",
+      "requestedSubject": "TP_RESET relative to GND"
     },
     {
       "id": "observe_output_voltage",
       "tool": "digital multimeter",
       "mode": "DC voltage",
       "power_state": "powered",
-      "procedure": "Measure TP_OUTPUT relative to GND for at least five seconds and watch whether the displayed reading changes repeatedly or remains steady.",
+      "procedure": "Use only this 5 V demo board. If you cannot locate TP_OUTPUT and GND, stop and ask for help identifying them. Before connecting the probes, put the black lead in COM and the red lead in the voltage (V) socket, not a current socket. Select DC voltage (V with a straight/dashed line); use auto-range or a manual range above 5.5 V, such as 20 V. With the board powered from its specified 5 V DC supply, touch the black probe to GND and the red probe to TP_OUTPUT. Keep the tips from bridging adjacent contacts. Watch the display for at least five seconds and report whether it changes repeatedly or stays steady, together with the readings in volts.",
       "possible_results": [
         {
           "result": "displayed reading changes repeatedly over the five-second observation",
@@ -155,28 +159,30 @@
         },
         {
           "result": "display remains between 0 V and 0.5 V",
-          "implication": "TP_OUTPUT is staying low instead of showing the intended changing output. LED1 alone cannot explain the missing output activity."
+          "implication": "The meter displays this range during the observation. It does not by itself prove a static waveform or identify a failed component. Account for meter response, device output characteristics, and the reported supply."
         },
         {
           "result": "display remains above 0.5 V and below 4.5 V",
-          "implication": "TP_OUTPUT is static at an intermediate voltage instead of showing the intended changing output. This result does not identify a single failed component."
+          "implication": "The meter displays this range during the observation. It does not by itself prove a static waveform or identify a failed component. Account for meter response, device output characteristics, and the reported supply."
         },
         {
           "result": "display remains between 4.5 V and 5.5 V",
-          "implication": "TP_OUTPUT is staying high instead of showing the intended changing output. More than one timing or control-path fault can produce this symptom."
+          "implication": "The meter displays this range during the observation. It does not by itself prove a static waveform or identify a failed component. Account for meter response, device output characteristics, and the reported supply."
         },
         {
           "result": "display remains above 5.5 V",
-          "implication": "TP_OUTPUT exceeds the circuit's recorded operating supply range. The supply and measurement conditions must be checked before the output state is interpreted."
+          "implication": "The meter displays this range during the observation. It does not by itself prove a static waveform or identify a failed component. Account for meter response, device output characteristics, and the reported supply."
         }
-      ]
+      ],
+      "expectedResponseType": "measurement",
+      "requestedSubject": "TP_OUTPUT relative to GND"
     },
     {
       "id": "observe_timing_voltage",
       "tool": "digital multimeter",
       "mode": "DC voltage",
       "power_state": "powered",
-      "procedure": "Measure TP_TIMING relative to GND for at least five seconds and watch whether the displayed reading changes repeatedly or remains steady.",
+      "procedure": "Use only this 5 V demo board. If you cannot locate TP_TIMING and GND, stop and ask for help identifying them. Before connecting the probes, put the black lead in COM and the red lead in the voltage (V) socket, not a current socket. Select DC voltage (V with a straight/dashed line); use auto-range or a manual range above 5.5 V, such as 20 V. With the board powered from its specified 5 V DC supply, touch the black probe to GND and the red probe to TP_TIMING. Keep the tips from bridging adjacent contacts. Watch the display for at least five seconds and report whether it changes repeatedly or stays steady, together with the readings in volts.",
       "possible_results": [
         {
           "result": "displayed reading changes repeatedly over the five-second observation",
@@ -184,21 +190,23 @@
         },
         {
           "result": "display remains between 0 V and 0.5 V",
-          "implication": "TP_TIMING is being held near GND or is unable to charge. More than one fault in the timing network can produce this result."
+          "implication": "The meter displays this range during the observation. It does not by itself prove a static waveform or identify a failed component. Account for meter response, device output characteristics, and the reported supply."
         },
         {
           "result": "display remains above 0.5 V and below 4.5 V",
-          "implication": "TP_TIMING is static at an intermediate voltage instead of showing repeated charge and discharge behaviour. This narrows investigation toward the timing or control path without identifying one failed component."
+          "implication": "The meter displays this range during the observation. It does not by itself prove a static waveform or identify a failed component. Account for meter response, device output characteristics, and the reported supply."
         },
         {
           "result": "display remains between 4.5 V and 5.5 V",
-          "implication": "TP_TIMING is remaining near the supply rail instead of repeatedly charging and discharging. A discharge-path or control-path fault remains possible."
+          "implication": "The meter displays this range during the observation. It does not by itself prove a static waveform or identify a failed component. Account for meter response, device output characteristics, and the reported supply."
         },
         {
           "result": "display remains above 5.5 V",
-          "implication": "TP_TIMING exceeds the circuit's recorded operating supply range. The supply and measurement conditions must be checked before timing behaviour is interpreted."
+          "implication": "The meter displays this range during the observation. It does not by itself prove a static waveform or identify a failed component. Account for meter response, device output characteristics, and the reported supply."
         }
-      ]
+      ],
+      "expectedResponseType": "measurement",
+      "requestedSubject": "TP_TIMING relative to GND"
     },
     {
       "id": "inspect_led_polarity",
@@ -218,7 +226,9 @@
           "result": "polarity indicators are not visible or cannot be interpreted reliably",
           "implication": "LED1 polarity remains unresolved. Component orientation must not be inferred from an uncertain visual observation."
         }
-      ]
+      ],
+      "expectedResponseType": "observation",
+      "requestedSubject": "LED1 orientation"
     },
     {
       "id": "measure_r3",
@@ -229,21 +239,23 @@
       "possible_results": [
         {
           "result": "313.5 Ohm to 346.5 Ohm",
-          "implication": "R3's measured resistance is within its recorded 330 Ohm ±5% range, so an open or substantially drifted R3 is not supported by this measurement."
+          "implication": "R3's measured resistance is within its recorded 330 Ohm \u00b15% range, so an open or substantially drifted R3 is not supported by this measurement."
         },
         {
           "result": "below 313.5 Ohm",
-          "implication": "R3 is below its recorded 330 Ohm ±5% range. Lower resistance increases current through the LED branch for the same output voltage, which can drive LED1 harder than intended."
+          "implication": "R3 is below its recorded 330 Ohm \u00b15% range. Lower resistance increases current through the LED branch for the same output voltage, which can drive LED1 harder than intended."
         },
         {
           "result": "above 346.5 Ohm but finite",
-          "implication": "R3 is above its recorded 330 Ohm ±5% range. Higher resistance reduces current through the LED branch for the same output voltage, which can make LED1 dimmer than intended."
+          "implication": "R3 is above its recorded 330 Ohm \u00b15% range. Higher resistance reduces current through the LED branch for the same output voltage, which can make LED1 dimmer than intended."
         },
         {
           "result": "open circuit",
           "implication": "R3 is electrically open, so the intended current path from TP_OUTPUT through LED1 is broken."
         }
-      ]
+      ],
+      "expectedResponseType": "measurement",
+      "requestedSubject": "R3 resistance"
     },
     {
       "id": "measure_r1",
@@ -254,21 +266,23 @@
       "possible_results": [
         {
           "result": "9.5 kOhm to 10.5 kOhm",
-          "implication": "R1's measured resistance is within its recorded 10 kOhm ±5% range, so an open or substantially drifted R1 is not supported by this measurement."
+          "implication": "R1's measured resistance is within its recorded 10 kOhm \u00b15% range, so an open or substantially drifted R1 is not supported by this measurement."
         },
         {
           "result": "below 9.5 kOhm",
-          "implication": "R1 is below its recorded 10 kOhm ±5% range. Lower R1 reduces charging resistance in the timing network, which can shorten the charging interval and increase the oscillator rate."
+          "implication": "R1 is below its recorded 10 kOhm \u00b15% range. Lower R1 reduces charging resistance in the timing network, which can shorten the charging interval and increase the oscillator rate."
         },
         {
           "result": "above 10.5 kOhm but finite",
-          "implication": "R1 is above its recorded 10 kOhm ±5% range. Higher R1 increases charging resistance in the timing network, which can lengthen the charging interval and reduce the oscillator rate."
+          "implication": "R1 is above its recorded 10 kOhm \u00b15% range. Higher R1 increases charging resistance in the timing network, which can lengthen the charging interval and reduce the oscillator rate."
         },
         {
           "result": "open circuit",
           "implication": "R1 is electrically open, so the intended charging path from TP_SUPPLY into the timing network is broken."
         }
-      ]
+      ],
+      "expectedResponseType": "measurement",
+      "requestedSubject": "R1 resistance"
     },
     {
       "id": "check_c1_for_short",
@@ -285,7 +299,9 @@
           "result": "resistance does not remain below 10 Ohm for the full ten-second observation",
           "implication": "A hard short through C1 is not supported by this measurement. This result does not establish that C1 has the correct capacitance or dynamic behaviour."
         }
-      ]
+      ],
+      "expectedResponseType": "measurement",
+      "requestedSubject": "C1 resistance"
     }
   ],
   "fault_cases": [
@@ -358,5 +374,12 @@
         "The user measured TP_SUPPLY relative to GND and obtained 5.0 V."
       ]
     }
+  ],
+  "limitations": [
+    "Runtime context does not establish U1 exact part-number identity. Do not infer identity from appearance.",
+    "The fixture describes intended behaviour, not a fully verified construction schematic. U1 pin connections are not completely specified.",
+    "A steady multimeter display alone does not prove a timing/output waveform is static; instrument response can hide oscillation.",
+    "Output high voltage depends on the actual timer device and load. It is not guaranteed to reach the 5 V supply rail.",
+    "The reset assertion threshold depends on the actual device. A reading between 0.3 V and 1 V does not by itself establish reset state."
   ]
 }

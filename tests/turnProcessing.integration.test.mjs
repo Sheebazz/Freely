@@ -4,10 +4,18 @@ import supabaseRepository from "../src/repositories/supabaseSession.repository.j
 import supabaseConfig from "../src/config/supabase.js";
 import turnProcessingService from "../src/services/turnProcessing.service.js";
 import sessionService from "../src/services/session.service.js";
+import circuitService from "../src/services/circuitContext.service.js";
 
 const { createSession, getItemsForSession, getTurn } = supabaseRepository;
 const { supabase } = supabaseConfig;
-const { processUserTurn } = turnProcessingService;
+const circuit = circuitService.prepareCircuitContext("circuit-one", { description: {} });
+function processUserTurn(args) {
+  return turnProcessingService.processUserTurn({ ...args, circuitLoader: () => circuit,
+    reasoningProvider: { reason: async () => ({ kind: "context_required",
+      message: "Which measurement point are you investigating?",
+      why: "The test fixture has no test catalogue.", testId: null,
+      supportingItemIds: [], hypotheses: [] }) } });
+}
 const { currentItems } = sessionService;
 
 async function cleanupSession(sessionId) {
